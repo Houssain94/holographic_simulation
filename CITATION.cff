@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "Holography Bench: browser simulators for in-line and off-axis digital holographic microscopy"
+version: 1.1.0
+date-released: 2026-10-07
+license: MIT
+repository-code: "https://github.com/YOUR-USERNAME/holography-bench"
+url: "https://YOUR-USERNAME.github.io/holography-bench/"
+authors:
+  - family-names: "FAMILY-NAME"
+    given-names: "Houssain"
+    # orcid: "https://orcid.org/0000-0000-0000-0000"
+keywords:
+  - digital holographic microscopy
+  - in-line holography
+  - lensless imaging
+  - off-axis holography
+  - angular spectrum method
+  - WebGPU

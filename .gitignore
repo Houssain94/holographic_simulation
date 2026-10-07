@@ -1,0 +1,23 @@
+# desktop build
+desktop/node_modules/
+desktop/dist/
+desktop/site/
+*.zip
+
+# LaTeX build files
+docs/theory/*.aux
+docs/theory/*.log
+docs/theory/*.out
+docs/theory/*.toc
+docs/theory/*.fls
+docs/theory/*.fdb_latexmk
+docs/theory/*.synctex.gz
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# OS
+.DS_Store
+Thumbs.db

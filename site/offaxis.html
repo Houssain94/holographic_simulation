@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Off-Axis Holographic Microscope</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: control rack left; table, detectors, Fourier plane and reconstruction right. Anodised-breadboard dark look shared with the other benches. */
+:root{
+  --table:#161b21; --panel:#1e252d; --panel2:#252e37; --line:#34404c; --hole:#0f1317;
+  --fg:#dbe3ea; --muted:#8b99a7; --hene:#ff3b2f; --armb:#ffb02e; --ok:#4cc38a; --warn:#e8a33b; --bad:#ef5b5b; --focus:#7cc4ff; --fourier:#63d2ff; --truth:#e8a33b;
+  --display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+html,body{background:var(--table);color:var(--fg)}
+body{font-family:var(--display);font-size:15px;line-height:1.45;padding-inline:16px;padding-block:18px 40px}
+.wrap{max-width:1560px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+h1{font-size:1.7rem;font-weight:700;letter-spacing:.01em;margin:0;text-wrap:balance}
+.sub{color:var(--muted);margin:2px 0 0;font-size:.95rem}
+.pill{font-family:var(--mono);font-size:.82rem;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--panel);white-space:nowrap}
+.pill.ok{border-color:var(--ok);color:var(--ok)} .pill.warn{border-color:var(--warn);color:var(--warn)} .pill.bad{border-color:var(--bad);color:var(--bad)}
+.layout{display:grid;grid-template-columns:370px minmax(0,1fr);gap:16px;align-items:start}
+.side,.main{display:flex;flex-direction:column;gap:16px;min-width:0}
+@media (max-width:1000px){.layout{grid-template-columns:minmax(0,1fr)}.side{order:2}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0}
+.card h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:0 0 10px;font-weight:600}
+canvas{display:block;width:100%;height:auto;border-radius:6px}
+#table{background:var(--hole)}
+.dets{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+@media (max-width:1250px){.dets{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.det{display:flex;flex-direction:column;gap:6px;min-width:0}
+.det .lab{display:flex;flex-wrap:wrap;gap:0 8px;justify-content:space-between;font-family:var(--mono);font-size:.76rem;color:var(--muted);min-height:2.4em;align-content:flex-start}
+.det .lab b{color:var(--fg);font-weight:500}
+.det.f .lab b{color:var(--fourier)}
+.det canvas.sq{aspect-ratio:1/1;background:#000}
+.readout{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:8px;margin-top:12px}
+.ro{background:var(--panel2);border-radius:6px;padding:8px 10px}
+.ro .k{font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+.ro .v{font-family:var(--mono);font-size:.95rem;font-variant-numeric:tabular-nums}
+.ro .s{font-size:.72rem;color:var(--muted)}
+.ro.good{outline:1px solid var(--ok)} .ro.badv{outline:1px solid var(--bad)} .ro.warnv{outline:1px solid var(--warn)}
+.mounts{display:flex;flex-direction:column;gap:10px}
+.mount{background:var(--panel2);border-radius:8px;padding:10px 12px}
+.mount h3{margin:0;font-size:1.02rem;display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
+.mount h3 small{font-family:var(--mono);font-size:.7rem;color:var(--muted);font-weight:400}
+.tag{font-size:.68rem;padding:1px 7px;border-radius:4px;font-family:var(--mono);margin-left:auto}
+.tag.a{background:color-mix(in srgb,var(--hene) 22%,transparent);color:var(--hene)}
+.tag.b{background:color-mix(in srgb,var(--armb) 22%,transparent);color:var(--armb)}
+.knob{display:grid;grid-template-columns:5.4em minmax(0,1fr) 6.2em;align-items:center;gap:8px;margin-top:8px}
+.knob.m{grid-template-columns:3.4em minmax(0,1fr) auto auto 5.6em;gap:6px}
+.knob.sel{grid-template-columns:5.4em minmax(0,1fr)}
+.knob label{font-size:.8rem;color:var(--muted)}
+.knob button{padding:2px 8px;font-family:var(--mono)}
+input[type=range]{width:100%;accent-color:var(--focus);min-width:0}
+input.num{width:100%;min-width:0;font-family:var(--mono);font-size:.8rem;text-align:right;background:var(--hole);color:var(--fg);border:1px solid var(--line);border-radius:5px;padding:3px 5px;font-variant-numeric:tabular-nums}
+input.num:focus{border-color:var(--focus)}
+.unit{font-family:var(--mono);font-size:.7rem;color:var(--muted);white-space:nowrap}
+.numwrap{display:flex;align-items:center;gap:4px;min-width:0}
+input[type=checkbox]{accent-color:var(--focus)}
+.chk{display:flex;gap:8px;align-items:center;margin-top:8px;font-size:.85rem}
+button{font:inherit;font-size:.85rem;color:var(--fg);background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:6px 10px;cursor:pointer}
+button:hover{border-color:var(--focus)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+button.primary{background:color-mix(in srgb,var(--focus) 18%,var(--panel2));border-color:color-mix(in srgb,var(--focus) 60%,var(--line))}
+button[aria-pressed=true]{background:color-mix(in srgb,var(--warn) 25%,var(--panel2));border-color:var(--warn)}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+select{font:inherit;font-size:.85rem;background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:5px 8px;min-width:0;width:100%}
+.steps{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:8px}
+.steps li{padding-left:4px}
+.steps li.done{color:var(--ok)}
+.steps li .hint{display:block;color:var(--muted);font-size:.85rem}
+.steps li.done .hint{color:color-mix(in srgb,var(--ok) 70%,var(--muted))}
+.note{color:var(--muted);font-size:.82rem;margin:8px 0 0}
+.legend{display:flex;gap:14px;font-family:var(--mono);font-size:.76rem;color:var(--muted);flex-wrap:wrap;align-items:center}
+.legend i{display:inline-block;width:18px;height:2px;vertical-align:middle;margin-right:5px}
+.two{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px}
+@media (max-width:1250px){.two{grid-template-columns:minmax(0,1fr)}}
+.explain p{margin:0 0 8px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Off-Axis Holographic Microscope</h1>
+      <p class="sub">Mach–Zehnder DHM · He–Ne 632.8 nm · sample, objective and tube lens in arm B (object arm), arm A is the reference · BS2 combines the beams just before the camera</p>
+    </div>
+    <span id="status" class="pill">—</span>
+  </header>
+
+  <div class="layout">
+    <aside class="side" aria-label="Parameters">
+      <section class="card">
+        <h2>Mounts · tilt in mrad</h2>
+        <div class="mounts" id="mounts"></div>
+        <p class="note">Type a value or drag. − / + are fine steps of 0.01 mrad. Range ±40 mrad, enough for the off-axis angle.</p>
+        <div class="bar" style="margin-top:10px">
+          <button id="perfect">Align on-axis</button>
+          <button id="offaxis" class="primary">Set optimal off-axis angle</button>
+          <button id="scramble">Misalign randomly</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Microscope and camera</h2>
+        <div class="knob sel"><label for="objsel">Objective</label>
+          <select id="objsel"><option value="10,0.25">10× / 0.25</option><option value="20,0.4" selected>20× / 0.40</option><option value="40,0.65">40× / 0.65</option><option value="60,0.85">60× / 0.85</option><option value="custom">custom</option></select></div>
+        <div id="micro"></div>
+        <div class="knob sel"><label for="Nsel">Sensor</label>
+          <select id="Nsel"><option value="256">256 × 256 px (fast)</option><option value="512" selected>512 × 512 px</option></select></div>
+      </section>
+
+      <section class="card">
+        <h2>Sample (in arm B)</h2>
+        <div class="knob sel"><label for="stype">Sample</label>
+          <select id="stype">
+            <option value="rbc" selected>red blood cells</option>
+            <option value="beads">microspheres (beads)</option>
+            <option value="text">glass plate with etched pattern</option>
+            <option value="edge">glass plate edge / thin-film step</option>
+            <option value="wedge">glass wedge</option>
+            <option value="uniform">uniform glass plate</option>
+            <option value="dust">opaque particles</option>
+            <option value="none">none (empty slide)</option>
+          </select></div>
+        <div id="sparams"></div>
+        <div id="sdef"></div>
+        <p class="note" id="sinfo"></p>
+      </section>
+
+      <section class="card">
+        <h2>Reconstruction</h2>
+        <div id="recp"></div>
+        <label class="chk"><input type="checkbox" id="blank" checked> Divide by a blank hologram (no sample) to remove tilt and background</label>
+        <label class="chk"><input type="checkbox" id="auto" checked> Find the +1 order automatically</label>
+        <div class="bar" style="margin-top:8px"><button id="matchdz">Refocus to the sample defocus</button></div>
+        <p class="note">Steps: FFT of the hologram → keep the +1 order inside the circle → shift it to the centre → inverse FFT → complex field of the sample → optional numerical refocus.</p>
+      </section>
+
+      <section class="card">
+        <h2>Beam and path</h2>
+        <div id="beamp"></div>
+        <div class="knob sel"><label for="Rin">Input</label>
+          <select id="Rin"><option value="inf">collimated</option><option value="1000">diverging, R = 1 m</option></select></div>
+        <p class="note">The piezo adds optical path to arm B. It moves the fringes but not the reconstructed phase once the blank hologram is divided out.</p>
+      </section>
+    </aside>
+
+    <main class="main">
+      <section class="card">
+        <h2>Table, top view <span style="text-transform:none;letter-spacing:0">(tilts drawn ×<span id="exv">40</span> so you can see them)</span></h2>
+        <canvas id="table" width="900" height="500" aria-label="Top view of the off-axis holographic microscope"></canvas>
+        <div class="bar" style="margin-top:10px">
+          <button id="blockA" aria-pressed="false">Block arm A</button>
+          <button id="blockB" aria-pressed="false">Block arm B</button>
+          <button id="irises" aria-pressed="false">Irises open</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Detectors and Fourier plane</h2>
+        <div class="dets">
+          <div class="det"><div class="lab"><span><b>I3</b> · near</span><span id="i3r">—</span></div><canvas id="i3" class="sq" width="260" height="260"></canvas></div>
+          <div class="det"><div class="lab"><span><b>I4</b> · far</span><span id="i4r">—</span></div><canvas id="i4" class="sq" width="260" height="260"></canvas></div>
+          <div class="det"><div class="lab"><span><b>Hologram</b> · camera</span><span id="camr">—</span></div><canvas id="cam" class="sq" width="512" height="512"></canvas></div>
+          <div class="det f"><div class="lab"><span><b>|FFT|</b> · log</span><span id="fftr">—</span></div><canvas id="fft" class="sq" width="512" height="512"></canvas></div>
+        </div>
+        <div class="readout" id="ro1"></div>
+      </section>
+
+      <section class="card">
+        <h2>Sample and reconstruction</h2>
+        <div class="dets">
+          <div class="det"><div class="lab"><span><b>Sample</b> · true phase</span><span id="l-truth">—</span></div><canvas id="c-truth" class="sq" width="400" height="400"></canvas></div>
+          <div class="det"><div class="lab"><span><b>Reconstruction</b> · amplitude</span><span id="l-ramp">—</span></div><canvas id="c-ramp" class="sq" width="400" height="400"></canvas></div>
+          <div class="det"><div class="lab"><span><b>Reconstruction</b> · phase</span><span id="l-rph">—</span></div><canvas id="c-rph" class="sq" width="400" height="400"></canvas></div>
+          <div class="det"><div class="lab"><span><b>Line profile</b></span><span id="l-prof">—</span></div><canvas id="c-prof" class="sq" width="400" height="400"></canvas></div>
+        </div>
+        <div class="bar" style="margin-top:10px">
+          <div id="rowbox" style="flex:1;min-width:260px"></div>
+          <span class="legend"><span><i style="background:var(--truth)"></i>truth</span><span><i style="background:var(--focus)"></i>reconstruction</span></span>
+          <span class="legend">phase −π <canvas id="cbar" width="140" height="10" style="width:140px;display:inline-block;vertical-align:middle;margin:0 4px"></canvas> +π</span>
+        </div>
+        <div class="readout" id="ro2"></div>
+      </section>
+
+      <div class="two">
+        <section class="card">
+          <h2>Procedure</h2>
+          <ol class="steps">
+            <li id="s1">Block arm B. Close irises. Arm A: tilt <b>BS1</b> to centre on I3, then <b>M1</b> to centre on I4. Repeat.<span class="hint">Both red spots within 0.25 mm of the iris centre.</span></li>
+            <li id="s2">Block arm A. Arm B: tilt <b>M2</b> to centre on I3, then <b>BS2</b> to centre on I4. Repeat.<span class="hint">Both amber spots within 0.25 mm of the iris centre.</span></li>
+            <li id="s3">Open irises, unblock both arms. Fine-tune <b>BS2</b> until the fringes are wider than the camera (on-axis).<span class="hint">θ below 0.1 mrad: one fringe fills the sensor.</span></li>
+            <li id="s4">Tilt <b>BS2</b> (both axes) to set the off-axis angle, or press “Set optimal off-axis angle”.<span class="hint">In the FFT, the +1 order must sit clear of the centre (carrier ≥ 3 × object bandwidth) and inside the frame (carrier + bandwidth ≤ Nyquist).</span></li>
+          </ol>
+          <p class="note">A diagonal carrier (both axes) packs the orders best into the square Fourier plane. The irises are alignment tools: they are used before BS2 is tilted for the carrier.</p>
+        </section>
+        <section class="card explain">
+          <h2>How off-axis DHM works</h2>
+          <p>The objective and tube lens image the sample onto the camera with magnification M. The reference beam reaches the camera at a small angle θ, so the hologram is the sample image written onto straight carrier fringes of period λ/θ.</p>
+          <p>In the Fourier plane this gives three separate parts: the centre (the two intensities), and the +1 and −1 orders at ± the carrier frequency. Each order is a copy of the sample's complex field, with radius NA/(λM). Cutting out the +1 order and moving it to the centre recovers amplitude and phase from a single image.</p>
+          <p>The phase is the optical path difference: φ = 2π·Δn·thickness/λ. For red blood cells this gives the cell shape, including the central dimple.</p>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+// ---------------------------------------------------------------- constants and state
+const LAM_MM=632.8e-6, LAM=0.6328, K=2*Math.PI/LAM_MM, ARM=300, Z_I3=50, Z_I4=1000;
+const C={BS1:[0,0],M1:[0,ARM],M2:[ARM,0],BS2:[ARM,ARM]}, N0=[-Math.SQRT1_2,Math.SQRT1_2], EL=["BS1","M1","M2","BS2"], TILT=40;
+const rot=(v,a)=>[Math.cos(a)*v[0]-Math.sin(a)*v[1],Math.sin(a)*v[0]+Math.cos(a)*v[1]], dot=(a,b)=>a[0]*b[0]+a[1]*b[1];
+const S={BS1:{h:0,v:0},M1:{h:0,v:0},M2:{h:0,v:0},BS2:{h:0,v:0},
+  piezo:0,dL:0,R:Infinity,blockA:false,blockB:false,closed:false,
+  M:20,NA:0.4,px:3.45,N:512,zcam:20,W:5,noise:1,
+  stype:"rbc",sv:{},sdz:0,filt:1.1,rdz:0,blank:true,auto:true,row:0};
+let schedule=()=>{};
+
+// ---------------------------------------------------------------- manual-entry controls (slider + number box)
+function control(parent,{id,label,min,max,step,value,unit,dec,get,set,cls,noSchedule}){
+  const row=document.createElement("div"); row.className="knob"+(cls?" "+cls:"");
+  row.innerHTML=`<label for="${id}">${label}</label><input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${value}"><span class="numwrap"><input class="num" id="${id}-n" type="number" min="${min}" max="${max}" step="${step}" value="${(+value).toFixed(dec)}" aria-label="${label} value"><span class="unit">${unit||""}</span></span>`;
+  parent.appendChild(row);
+  const r=row.querySelector("input[type=range]"), n=row.querySelector("input.num");
+  const apply=v=>{ if(!isFinite(v)) return; v=Math.max(min,Math.min(max,v)); set(v); r.value=v; schedule(); };
+  r.addEventListener("input",()=>{apply(+r.value); n.value=(+r.value).toFixed(dec);});
+  n.addEventListener("change",()=>{apply(+n.value); n.value=(+get()).toFixed(dec);});
+  n.addEventListener("keydown",e=>{if(e.key==="Enter"){apply(+n.value); n.value=(+get()).toFixed(dec);}});
+  return {sync(){r.value=get(); n.value=(+get()).toFixed(dec);}};
+}
+const controls={};
+
+// ---------------------------------------------------------------- mounts
+const info={BS1:["beamsplitter","a","arm A"],M1:["mirror","a","arm A"],M2:["mirror","b","arm B"],BS2:["combiner","b","arm B"]};
+for(const e of EL){
+  const [kind,arm,aff]=info[e];
+  const div=document.createElement("div"); div.className="mount";
+  div.innerHTML=`<h3>${e} <small>${kind}</small><span class="tag ${arm}">steers ${aff}</span></h3>`;
+  $("mounts").appendChild(div);
+  for(const ax of ["h","v"]){
+    const id=`${e}-${ax}`;
+    const row=document.createElement("div"); row.className="knob m";
+    row.innerHTML=`<label for="${id}">${ax==="h"?"Horiz.":"Vert."}</label><input id="${id}" type="range" min="${-TILT}" max="${TILT}" step="0.001" value="0">
+      <button data-e="${e}" data-ax="${ax}" data-d="-0.01" aria-label="${e} ${ax} fine minus">−</button><button data-e="${e}" data-ax="${ax}" data-d="0.01" aria-label="${e} ${ax} fine plus">+</button>
+      <input class="num" id="${id}-n" type="number" min="${-TILT}" max="${TILT}" step="0.001" value="0.000" aria-label="${e} ${ax==="h"?"horizontal":"vertical"} tilt in mrad">`;
+    div.appendChild(row);
+    const r=row.querySelector("input[type=range]"), n=row.querySelector("input.num");
+    const apply=v=>{if(!isFinite(v))return; v=Math.max(-TILT,Math.min(TILT,v)); S[e][ax]=v*1e-3; syncMounts(); schedule();};
+    r.addEventListener("input",()=>apply(+r.value));
+    n.addEventListener("change",()=>apply(+n.value)); n.addEventListener("keydown",ev=>{if(ev.key==="Enter")apply(+n.value);});
+  }
+}
+$("mounts").addEventListener("click",ev=>{const b=ev.target.closest("button[data-e]"); if(!b)return; const e=b.dataset.e,ax=b.dataset.ax;
+  S[e][ax]=Math.max(-TILT*1e-3,Math.min(TILT*1e-3,S[e][ax]+(+b.dataset.d)*1e-3)); syncMounts(); schedule();});
+function syncMounts(){for(const e of EL)for(const ax of ["h","v"]){const v=S[e][ax]*1e3; $(`${e}-${ax}`).value=v; const n=$(`${e}-${ax}-n`); if(document.activeElement!==n) n.value=v.toFixed(3);}}
+
+// ---------------------------------------------------------------- microscope, beam, reconstruction controls
+controls.M=control($("micro"),{id:"Mag",label:"Magnification",min:1,max:100,step:0.1,value:S.M,unit:"×",dec:1,get:()=>S.M,set:v=>{S.M=v;$("objsel").value="custom";}});
+controls.NA=control($("micro"),{id:"NA",label:"Objective NA",min:0.02,max:1.2,step:0.01,value:S.NA,unit:"",dec:2,get:()=>S.NA,set:v=>{S.NA=v;$("objsel").value="custom";}});
+controls.px=control($("micro"),{id:"px",label:"Pixel pitch",min:1,max:10,step:0.01,value:S.px,unit:"µm",dec:2,get:()=>S.px,set:v=>S.px=v});
+controls.zcam=control($("micro"),{id:"zcam",label:"BS2 → camera",min:5,max:300,step:1,value:S.zcam,unit:"mm",dec:0,get:()=>S.zcam,set:v=>S.zcam=v});
+controls.W=control($("micro"),{id:"W",label:"Beam radius",min:1,max:12,step:0.1,value:S.W,unit:"mm",dec:1,get:()=>S.W,set:v=>S.W=v});
+controls.noise=control($("micro"),{id:"noise",label:"Camera noise",min:0,max:10,step:0.1,value:S.noise,unit:"%",dec:1,get:()=>S.noise,set:v=>S.noise=v});
+$("objsel").addEventListener("change",e=>{if(e.target.value==="custom")return; const [m,na]=e.target.value.split(",").map(Number); S.M=m; S.NA=na; controls.M.sync(); controls.NA.sync(); schedule();});
+$("Nsel").addEventListener("change",e=>{S.N=+e.target.value; schedule();});
+controls.filt=control($("recp"),{id:"filt",label:"Filter radius",min:0.5,max:2,step:0.05,value:S.filt,unit:"×NA/λM",dec:2,get:()=>S.filt,set:v=>S.filt=v});
+controls.rdz=control($("recp"),{id:"rdz",label:"Refocus Δz",min:-100,max:100,step:0.5,value:S.rdz,unit:"µm",dec:1,get:()=>S.rdz,set:v=>S.rdz=v});
+$("blank").addEventListener("change",e=>{S.blank=e.target.checked; schedule();});
+$("auto").addEventListener("change",e=>{S.auto=e.target.checked; schedule();});
+$("matchdz").addEventListener("click",()=>{S.rdz=S.sdz; controls.rdz.sync(); schedule();});
+controls.piezo=control($("beamp"),{id:"piezo",label:"Piezo",min:0,max:1266,step:1,value:0,unit:"nm",dec:0,get:()=>S.piezo*1e6,set:v=>S.piezo=v*1e-6});
+controls.dL=control($("beamp"),{id:"dL",label:"ΔL arm B",min:0,max:300,step:1,value:0,unit:"mm",dec:0,get:()=>S.dL,set:v=>S.dL=v});
+$("Rin").addEventListener("change",e=>{S.R=e.target.value==="inf"?Infinity:+e.target.value; schedule();});
+controls.sdz=control($("sdef"),{id:"sdz",label:"Sample defocus",min:-100,max:100,step:0.5,value:0,unit:"µm",dec:1,get:()=>S.sdz,set:v=>S.sdz=v});
+controls.row=control($("rowbox"),{id:"row",label:"Profile row",min:-0.5,max:0.5,step:0.005,value:0,unit:"× FOV",dec:2,get:()=>S.row,set:v=>S.row=v});
+
+// ---------------------------------------------------------------- samples (sample-plane µm)
+const SAMPLES={
+  rbc:{p:[["D","Cell diameter",4,12,0.1,7.8,"µm",1],["nc","Cell index",1.36,1.45,0.001,1.40,"",3],["nm","Plasma index",1.33,1.36,0.001,1.345,"",3],["cnt","Count",1,30,1,8,"",0],["seed","Layout",1,50,1,3,"",0]],
+    info:"Biconcave discs, roughly 0.8 µm thick in the centre and 2.6 µm at the rim (approximate profile). Peak phase ≈ 2π·Δn·2.6 µm/λ ≈ 1.4 rad."},
+  beads:{p:[["D","Diameter",0.5,40,0.1,5,"µm",1],["nb","Bead index",1.35,1.7,0.005,1.37,"",3],["nm","Medium index",1.0,1.55,0.005,1.33,"",3],["cnt","Count",1,40,1,10,"",0],["seed","Layout",1,50,1,7,"",0]],
+    info:"Thin-object model: phase = 2π(n_b − n_m)·thickness/λ. Phase above π wraps; the display shows the wrapped phase."},
+  text:{p:[["h","Etch depth",0.02,1.5,0.01,0.3,"µm",2],["n","Glass index",1.4,1.9,0.005,1.52,"",3],["H","Letter height",3,400,1,20,"µm",0]],
+    info:"Letters etched into the glass surface. Phase = 2π(n−1)·depth/λ."},
+  edge:{p:[["t","Step height",0.02,3,0.01,0.3,"µm",2],["n","Index n",1.3,1.9,0.005,1.52,"",3],["x","Edge position",-0.4,0.4,0.01,0,"× FOV",2]],
+    info:"Half of the field passes through a thin layer. Off-axis DHM measures its height directly: h = φλ / (2π(n−1))."},
+  wedge:{p:[["a","Wedge angle",0,20,0.1,2,"mrad",1],["dir","Direction",0,180,1,0,"°",0],["n","Index n",1.3,1.9,0.005,1.52,"",3]],
+    info:"A linear phase ramp. It shifts the +1 order in the Fourier plane; the reconstruction shows a tilted phase."},
+  uniform:{p:[["t","Thickness",1,1000,1,170,"µm",0],["n","Index n",1.4,1.9,0.005,1.52,"",3]],
+    info:"Adds only a constant phase. With the blank hologram divided out, it cannot be seen."},
+  dust:{p:[["D","Diameter",0.5,40,0.1,3,"µm",1],["cnt","Count",1,40,1,10,"",0],["seed","Layout",1,50,1,11,"",0]],
+    info:"Opaque discs: they show up in the amplitude, and their phase is undefined."},
+  none:{p:[],info:"Empty slide: the reconstruction should be flat."},
+};
+const sv=k=>S.sv[S.stype+k];
+function buildSampleUI(){
+  const box=$("sparams"); box.innerHTML="";
+  for(const [key,lab,mn,mx,st,def,unit,dec] of SAMPLES[S.stype].p){
+    if(S.sv[S.stype+key]===undefined) S.sv[S.stype+key]=def;
+    control(box,{id:"s-"+key,label:lab,min:mn,max:mx,step:st,value:S.sv[S.stype+key],unit,dec,get:()=>S.sv[S.stype+key],set:v=>S.sv[S.stype+key]=v});
+  }
+  $("sinfo").textContent=SAMPLES[S.stype].info;
+}
+$("stype").addEventListener("change",e=>{S.stype=e.target.value; buildSampleUI(); schedule();});
+function rng(seed){let a=seed>>>0;return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function gauss(r){let u=0,v=0;while(u===0)u=r();while(v===0)v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+function makeSample(N,dx){
+  const amp=new Float64Array(N*N).fill(1), ph=new Float64Array(N*N), k=2*Math.PI/LAM, fov=N*dx, X=i=>(i-N/2)*dx, Yr=j=>(N/2-j)*dx;
+  const place=(cnt,D,seed)=>{const r=rng(seed*7919+13), pts=[[0,0]]; let t=0; while(pts.length<cnt&&t<4000){t++; const x=(r()-.5)*fov*.82, y=(r()-.5)*fov*.82; if(pts.every(p=>Math.hypot(p[0]-x,p[1]-y)>D*1.12)) pts.push([x,y]);} return pts;};
+  const disk=(cx,cy,R,fn)=>{const i0=Math.max(0,Math.floor((cx-R)/dx+N/2)-1),i1=Math.min(N,Math.ceil((cx+R)/dx+N/2)+1),j0=Math.max(0,Math.floor(N/2-(cy+R)/dx)-1),j1=Math.min(N,Math.ceil(N/2-(cy-R)/dx)+1);
+    for(let j=j0;j<j1;j++)for(let i=i0;i<i1;i++){const r=Math.hypot(X(i)-cx,Yr(j)-cy); if(r<R+dx) fn(j*N+i,r);}};
+  switch(S.stype){
+    case "rbc":{const D=sv("D"),R=D/2,s=D/7.82,dn=sv("nc")-sv("nm"); for(const [cx,cy] of place(sv("cnt"),D,sv("seed"))) disk(cx,cy,R,(q,r)=>{if(r>=R)return; const u=(r/R)**2; ph[q]+=k*dn*s*Math.sqrt(1-u)*(0.81+7.83*u-4.39*u*u);}); break;}
+    case "beads":{const R=sv("D")/2,dn=sv("nb")-sv("nm"); for(const [cx,cy] of place(sv("cnt"),sv("D"),sv("seed"))) disk(cx,cy,R,(q,r)=>{if(r<R) ph[q]+=k*dn*2*Math.sqrt(R*R-r*r);}); break;}
+    case "text":{const c=document.createElement("canvas"); c.width=c.height=N; const g=c.getContext("2d"); g.fillStyle="#000"; g.fillRect(0,0,N,N); g.fillStyle="#fff";
+      const hp=sv("H")/dx; g.font=`700 ${hp*1.35}px ${css("--display")}`; g.textAlign="center"; g.textBaseline="middle"; g.fillText("DHM",N/2,N/2+hp*0.05);
+      const d=g.getImageData(0,0,N,N).data, p0=k*(sv("n")-1)*sv("h"); for(let q=0;q<N*N;q++) ph[q]=p0*d[q*4]/255; break;}
+    case "edge":{const x0=sv("x")*fov, p0=k*(sv("n")-1)*sv("t"); for(let j=0;j<N;j++)for(let i=0;i<N;i++) if(X(i)>x0) ph[j*N+i]=p0; break;}
+    case "wedge":{const a=sv("a")*1e-3*(sv("n")-1), t=sv("dir")*Math.PI/180; for(let j=0;j<N;j++)for(let i=0;i<N;i++) ph[j*N+i]=k*a*(X(i)*Math.cos(t)+Yr(j)*Math.sin(t)); break;}
+    case "uniform":{ph.fill(k*(sv("n")-1)*sv("t")); break;}
+    case "dust":{const R=sv("D")/2; for(const [cx,cy] of place(sv("cnt"),sv("D"),sv("seed"))) disk(cx,cy,R,(q,r)=>{amp[q]=Math.min(amp[q],r<R?0:(r-R)/dx);}); break;}
+  }
+  return {amp,ph};
+}
+
+// ---------------------------------------------------------------- FFT and propagation
+const fftCache={};
+function getFFT(N){ if(fftCache[N]) return fftCache[N];
+  const LOG=Math.log2(N), rev=new Uint32Array(N), cs=new Float64Array(N/2), sn=new Float64Array(N/2), tr=new Float64Array(N), ti=new Float64Array(N);
+  for(let i=0;i<N;i++){let r=0,x=i;for(let b=0;b<LOG;b++){r=(r<<1)|(x&1);x>>=1;}rev[i]=r;}
+  for(let i=0;i<N/2;i++){cs[i]=Math.cos(2*Math.PI*i/N);sn[i]=Math.sin(2*Math.PI*i/N);}
+  function f1(inv){for(let i=0;i<N;i++){const j=rev[i]; if(j>i){let t=tr[i];tr[i]=tr[j];tr[j]=t;t=ti[i];ti[i]=ti[j];ti[j]=t;}}
+    const sg=inv?1:-1; for(let size=2;size<=N;size<<=1){const h=size>>1,step=N/size; for(let s=0;s<N;s+=size)for(let k=0;k<h;k++){const c=cs[k*step],w=sg*sn[k*step],a=s+k,b=a+h; const xr=tr[b]*c-ti[b]*w, xi=tr[b]*w+ti[b]*c; tr[b]=tr[a]-xr; ti[b]=ti[a]-xi; tr[a]+=xr; ti[a]+=xi;}}}
+  function fft2(re,im,inv){for(let r=0;r<N;r++){const o=r*N; for(let i=0;i<N;i++){tr[i]=re[o+i];ti[i]=im[o+i];} f1(inv); for(let i=0;i<N;i++){re[o+i]=tr[i];im[o+i]=ti[i];}}
+    for(let c=0;c<N;c++){for(let j=0;j<N;j++){tr[j]=re[j*N+c];ti[j]=im[j*N+c];} f1(inv); for(let j=0;j<N;j++){re[j*N+c]=tr[j];im[j*N+c]=ti[j];}}
+    if(inv){const s=1/(N*N); for(let i=0;i<N*N;i++){re[i]*=s;im[i]*=s;}}}
+  return fftCache[N]={fft2};
+}
+// angular-spectrum propagation over z (µm), without the common piston exp(ikz), and optionally the objective pupil (coherent cut-off NA/λ)
+function filterProp(re,im,N,dx,z,pupil){
+  const F=getFFT(N); F.fft2(re,im,false); const du=1/(N*dx), inv2=1/(LAM*LAM), fc=pupil?S.NA/LAM:Infinity;
+  const ulim=z?1/(LAM*Math.sqrt((2*Math.abs(z)*du)**2+1)):Infinity;
+  for(let j=0;j<N;j++){const fy=(j<N/2?j:j-N)*du; for(let i=0;i<N;i++){const fx=(i<N/2?i:i-N)*du, q=j*N+i;
+    if(fx*fx+fy*fy>fc*fc || Math.abs(fx)>ulim || Math.abs(fy)>ulim){re[q]=0;im[q]=0;continue;}
+    if(z){const a=inv2-fx*fx-fy*fy; if(a<=0){re[q]=0;im[q]=0;continue;} const p=2*Math.PI*z*(Math.sqrt(a)-1/LAM), c=Math.cos(p), s=Math.sin(p), x=re[q], y=im[q]; re[q]=x*c-y*s; im[q]=x*s+y*c;}}}
+  F.fft2(re,im,true);
+}
+
+// ---------------------------------------------------------------- ray trace of the two arms (horizontal plane exact, vertical paraxial)
+function trace(arm,zAfter,mult=1){
+  let p=[-200,0],d=[1,0],y=0,av=0,L=0; const pts=[p.slice()];
+  const seq=arm==="A"?[["BS1","R"],["M1","R"],["BS2","T"]]:[["BS1","T"],["M2","R"],["BS2","R"]];
+  for(const [n,act] of seq){const nn=rot(N0,S[n].h*mult), c=C[n]; const t=dot([c[0]-p[0],c[1]-p[1]],nn)/dot(d,nn);
+    p=[p[0]+t*d[0],p[1]+t*d[1]]; L+=t; y+=av*t; pts.push(p.slice()); if(act==="R"){const k=2*dot(d,nn); d=[d[0]-k*nn[0],d[1]-k*nn[1]]; av+=2*S[n].v*mult;}}
+  const t=(ARM+zAfter-p[0])/d[0]; p=[p[0]+t*d[0],p[1]+t*d[1]]; L+=t; y+=av*t; pts.push(p.slice());
+  return{h:-(p[1]-ARM),y,ah:-Math.atan2(d[1],d[0]),av,L,pts};
+}
+
+// ---------------------------------------------------------------- simulation
+let sampleCache={key:""}, last=null;
+function sampleImage(){
+  const N=S.N, dx=S.px/S.M, key=JSON.stringify([S.stype,S.sv,S.M,S.NA,S.px,N,S.sdz]);
+  if(sampleCache.key===key) return sampleCache;
+  const t=makeSample(N,dx); const re=new Float64Array(N*N), im=new Float64Array(N*N);
+  for(let q=0;q<N*N;q++){re[q]=t.amp[q]*Math.cos(t.ph[q]); im[q]=t.amp[q]*Math.sin(t.ph[q]);}
+  const br=Float64Array.from(re), bi=Float64Array.from(im); filterProp(br,bi,N,dx,0,true);   // NA-limited, in focus (reference for the error)
+  filterProp(re,im,N,dx,S.sdz,true);                                                             // what the camera sees: defocus + pupil
+  sampleCache={key,img:{re,im},band:{re:br,im:bi},truth:t}; return sampleCache;
+}
+function hologram(A,B,img){ // camera intensity; img = sample image field (null = blank slide)
+  const N=S.N, p=S.px*1e-3, H=new Float64Array(N*N), W=S.W, L0=A.L;
+  const RA=isFinite(S.R)?S.R+A.L:Infinity, RB=isFinite(S.R)?S.R+B.L+S.dL:Infinity;
+  const r=rng(4242+(img?1:2)), sig=S.noise/100;
+  for(let j=0;j<N;j++){const y=(N/2-j-0.5)*p; for(let i=0;i<N;i++){const x=(i-N/2+0.5)*p, q=j*N+i; let re=0,im=0;
+    if(!S.blockA){const dx=x-A.h,dy=y-A.y,r2=dx*dx+dy*dy,a=Math.exp(-r2/(W*W))*Math.SQRT1_2; let ph=K*(A.ah*dx+A.av*dy); if(isFinite(RA)) ph+=K*r2/(2*RA); re+=a*Math.cos(ph); im+=a*Math.sin(ph);}
+    if(!S.blockB){const dx=x-B.h,dy=y-B.y,r2=dx*dx+dy*dy,a=Math.exp(-r2/(W*W))*Math.SQRT1_2; let ph=K*(B.L-L0+S.dL+S.piezo+B.ah*dx+B.av*dy); if(isFinite(RB)) ph+=K*r2/(2*RB);
+      let er=a*Math.cos(ph), ei=a*Math.sin(ph); if(img){const tr=img.re[q], ti=img.im[q]; const nr=er*tr-ei*ti; ei=er*ti+ei*tr; er=nr;} re+=er; im+=ei;}
+    H[q]=Math.max(0,re*re+im*im+sig*0.5*gauss(r));}}
+  return H;
+}
+// keep the order around FFT bin (ci,cj) within radius rb, shift it to the centre, inverse FFT
+function extractOrder(H,ci,cj,rb){
+  const N=S.N, re=Float64Array.from(H), im=new Float64Array(N*N), F=getFFT(N); F.fft2(re,im,false);
+  const or=new Float64Array(N*N), oi=new Float64Array(N*N), r2=rb*rb;
+  for(let dj=-Math.ceil(rb);dj<=Math.ceil(rb);dj++)for(let di=-Math.ceil(rb);di<=Math.ceil(rb);di++){ if(di*di+dj*dj>r2) continue;
+    const i=((ci+di)%N+N)%N, j=((cj+dj)%N+N)%N, q=j*N+i, t=((dj+N)%N)*N+((di+N)%N); or[t]=re[q]; oi[t]=im[q];}
+  F.fft2(or,oi,true); return {re:or,im:oi};
+}
+function simulate(){
+  const t0=performance.now(), N=S.N, p=S.px*1e-3;
+  const A=trace("A",S.zcam), B=trace("B",S.zcam);
+  const smp=sampleImage();
+  const H=hologram(A,B,smp.img);
+  const fx=(B.ah-A.ah)/LAM_MM, fy=(B.av-A.av)/LAM_MM;                 // carrier of the object term E_B·E_A* (cycles/mm)
+  const fobj=S.NA/(LAM_MM*S.M), nyq=1/(2*p), binPerF=N*p;
+  let ci=Math.round(fx*binPerF), cj=Math.round(-fy*binPerF);            // image rows run downwards
+  const hr=Float64Array.from(H), hi=new Float64Array(N*N); getFFT(N).fft2(hr,hi,false);
+  const mag=(i,j)=>{const q=(((j%N)+N)%N)*N+(((i%N)+N)%N); return hr[q]*hr[q]+hi[q]*hi[q];};
+  let found=null;
+  if(S.auto && !S.blockA && !S.blockB){
+    const ex=Math.max(4,Math.round(2*fobj*binPerF)); let best=0,bi=0,bj=0;
+    for(let j=-N/2+1;j<N/2;j++)for(let i=-N/2+1;i<N/2;i++){if(i*i+j*j<=ex*ex)continue; const m=mag(i,j); if(m>best){best=m;bi=i;bj=j;}}
+    if(best>1e-7*mag(0,0)){ if(bi*ci+bj*cj<0){bi=-bi;bj=-bj;} found=[bi,bj]; ci=bi; cj=bj; }
+  }
+  const rb=Math.max(2,S.filt*fobj*binPerF);
+  const O=extractOrder(H,ci,cj,rb);
+  if(S.blank){const O0=extractOrder(hologram(A,B,null),ci,cj,rb);
+    let mx=0; for(let q=0;q<N*N;q++){const a=O0.re[q]**2+O0.im[q]**2; if(a>mx) mx=a;} const e2=1e-4*mx;
+    for(let q=0;q<N*N;q++){const ar=O0.re[q], ai=O0.im[q], d=ar*ar+ai*ai+e2, a=O.re[q], b=O.im[q]; O.re[q]=(a*ar+b*ai)/d; O.im[q]=(b*ar-a*ai)/d;}}
+  else {let s=0; for(let q=0;q<N*N;q++) s+=Math.hypot(O.re[q],O.im[q]); s/=N*N; for(let q=0;q<N*N;q++){O.re[q]/=s; O.im[q]/=s;}}
+  if(S.rdz) filterProp(O.re,O.im,N,S.px/S.M,-S.rdz,false);
+  last={A,B,H,hr,hi,fx,fy,fobj,nyq,binPerF,ci,cj,rb,found,O,smp,t:performance.now()-t0};
+}
+
+// ---------------------------------------------------------------- drawing helpers
+const LUT=(()=>{const c=[[0.05,0.03,0.25],[0.13,0.28,0.55],[0.12,0.55,0.55],[0.36,0.78,0.38],[0.99,0.9,0.15]];
+  return [...Array(256)].map((_,k)=>{let t=k/255*(c.length-1); const i=Math.min(c.length-2,Math.floor(t)), f=t-i; return c[i].map((v,m)=>Math.round(255*(v+(c[i+1][m]-v)*f)));});})();
+const off=document.createElement("canvas");
+function paint(cv,N,val,mode,lo,hi){off.width=off.height=N; const g=off.getContext("2d"), img=g.createImageData(N,N), D=img.data;
+  for(let q=0;q<N*N;q++){const k=q*4; if(val[q]!==val[q]){D[k]=24;D[k+1]=28;D[k+2]=33;D[k+3]=255;continue;} let t=(val[q]-lo)/(hi-lo); t=Math.max(0,Math.min(1,t));
+    if(mode==="phase"){const c=LUT[Math.round(t*255)]; D[k]=c[0];D[k+1]=c[1];D[k+2]=c[2];}
+    else if(mode==="hene"){D[k]=Math.round(255*Math.pow(t,.7));D[k+1]=Math.round(255*Math.pow(t,2.2)*.75);D[k+2]=Math.round(255*Math.pow(t,4)*.6);}
+    else if(mode==="fourier"){D[k]=Math.round(255*Math.pow(t,3));D[k+1]=Math.round(255*Math.pow(t,1.4)*.85);D[k+2]=Math.round(255*Math.pow(t,.8));}
+    else {const v=Math.round(255*t); D[k]=D[k+1]=D[k+2]=v;} D[k+3]=255;}
+  g.putImageData(img,0,0); const c=cv.getContext("2d"); c.imageSmoothingEnabled=N<cv.width; c.clearRect(0,0,cv.width,cv.height); c.drawImage(off,0,0,cv.width,cv.height);}
+function scaleBar(cv,unitsPerPx,unit){const c=cv.getContext("2d"), W=cv.width, target=W*0.25*unitsPerPx, pw=10**Math.floor(Math.log10(target)); const nice=[1,2,5,10].map(m=>m*pw).filter(v=>v<=target).pop()||pw; const len=nice/unitsPerPx;
+  const f=Math.max(11,Math.round(W/34)); c.fillStyle="rgba(0,0,0,.55)"; c.fillRect(8,W-f*2.6,len+16,f*2.1); c.fillStyle="#fff"; c.fillRect(16,W-f*0.9,len,Math.max(3,f/4)); c.font=`${f}px ${css("--mono")}`; c.textAlign="left"; c.textBaseline="alphabetic"; c.fillText(`${+nice.toPrecision(3)} ${unit}`,16,W-f*1.2);}
+const wrap=p=>{p=(p+Math.PI)%(2*Math.PI); if(p<0)p+=2*Math.PI; return p-Math.PI;};
+const dd=b=>Math.hypot(b.h,b.y);
+
+// ---------------------------------------------------------------- table
+const tc=$("table"), tx=tc.getContext("2d"); const TW={x0:-230,x1:870,z0:-110,z1:410};
+const Wp=p=>[(p[0]-TW.x0)/(TW.x1-TW.x0)*tc.width, tc.height-(p[1]-TW.z0)/(TW.z1-TW.z0)*tc.height];
+function label(t,q,col,al="left",bold=false,size=15){tx.fillStyle=col;tx.font=`${bold?600:500} ${size}px ${css("--display")}`;tx.textAlign=al;tx.textBaseline="middle";tx.fillText(t,q[0],q[1]);}
+function drawTable(){
+  const w=tc.width,h=tc.height; tx.clearRect(0,0,w,h);
+  let mx=0; for(const e of EL) mx=Math.max(mx,Math.abs(S[e].h)); const EX=mx>0?Math.max(1,Math.min(40,0.2/mx)):40; $("exv").textContent=+EX.toPrecision(2);
+  tx.fillStyle="#232b33"; for(let x=-225;x<870;x+=25)for(let z=-100;z<410;z+=25){const q=Wp([x,z]);tx.beginPath();tx.arc(q[0],q[1],1.6,0,7);tx.fill();}
+  const L0=Wp([-215,-14]),L1=Wp([-135,14]); tx.fillStyle="#2c3a48"; tx.strokeStyle="#5c7a96"; tx.lineWidth=1.5; tx.fillRect(L0[0],L1[1],L1[0]-L0[0],L0[1]-L1[1]); tx.strokeRect(L0[0],L1[1],L1[0]-L0[0],L0[1]-L1[1]);
+  label("He–Ne",Wp([-175,-40]),"#8b99a7","center");
+  const Ae=trace("A",560,EX), Be=trace("B",560,EX);
+  const path=(pts,col,wd)=>{tx.save();tx.strokeStyle=col;tx.lineWidth=wd;tx.shadowColor=col;tx.shadowBlur=8;tx.beginPath();pts.forEach((p,i)=>{const q=Wp(p);i?tx.lineTo(q[0],q[1]):tx.moveTo(q[0],q[1]);});tx.stroke();tx.restore();};
+  path([[-135,0],[0,0]],css("--hene"),2.6);
+  if(!S.blockA) path(Ae.pts.slice(1),css("--hene"),2.2); else path([[0,0],[0,90]],css("--hene"),2.2);
+  if(!S.blockB) path(Be.pts.slice(1),css("--armb"),2.2); else path([[0,0],[55,0]],css("--armb"),2.2);
+  const box=p=>{const q=Wp(p);tx.fillStyle="#11161b";tx.strokeStyle="#8b99a7";tx.lineWidth=1.2;tx.fillRect(q[0]-12,q[1]-12,24,24);tx.strokeRect(q[0]-12,q[1]-12,24,24);};
+  if(S.blockA) box([0,105]); if(S.blockB) box([65,0]);
+  const sq=Wp([95,0]); tx.fillStyle="rgba(232,163,59,.25)"; tx.strokeStyle=css("--truth"); tx.lineWidth=1.5; tx.fillRect(sq[0]-3,sq[1]-22,6,44); tx.strokeRect(sq[0]-3,sq[1]-22,6,44);
+  label("sample",Wp([95,48]),css("--truth"),"center",true,13);
+  const oq=Wp([112,0]); tx.fillStyle="#46525e"; tx.beginPath(); tx.moveTo(oq[0],oq[1]-8); tx.lineTo(oq[0]+30,oq[1]-17); tx.lineTo(oq[0]+30,oq[1]+17); tx.lineTo(oq[0],oq[1]+8); tx.closePath(); tx.fill();
+  label(`objective ${+S.M.toFixed(1)}×/${S.NA.toFixed(2)}`,Wp([140,-50]),"#dbe3ea","center",false,12);
+  const lq=Wp([225,0]); tx.fillStyle="rgba(124,196,255,.2)"; tx.strokeStyle=css("--focus"); tx.lineWidth=1.5; tx.beginPath(); tx.ellipse(lq[0],lq[1],5,22,0,0,7); tx.fill(); tx.stroke();
+  label("tube lens",Wp([225,48]),"#8b99a7","center",false,12);
+  for(const e of EL){const c=C[e], n=rot(N0,S[e].h*EX), tv=[n[1],-n[0]], s=30; const a=Wp([c[0]-tv[0]*s,c[1]-tv[1]*s]), b=Wp([c[0]+tv[0]*s,c[1]+tv[1]*s]);
+    tx.strokeStyle=e.startsWith("BS")?"#7cc4ff":"#e6edf3"; tx.lineWidth=e.startsWith("BS")?5:7; tx.lineCap="butt"; tx.beginPath();tx.moveTo(a[0],a[1]);tx.lineTo(b[0],b[1]);tx.stroke();
+    const o={BS1:[34,-34],M1:[-40,30],M2:[40,-34],BS2:[-36,40]}[e]; label(e,Wp([c[0]+o[0],c[1]+o[1]]),"#dbe3ea","center",true);}
+  const iris=(x,name)=>{const g=S.closed?4:12; const p1=Wp([x,ARM+g]),p2=Wp([x,ARM+26]),p3=Wp([x,ARM-g]),p4=Wp([x,ARM-26]);
+    tx.strokeStyle="#aab6c2";tx.lineWidth=4;tx.beginPath();tx.moveTo(p1[0],p1[1]);tx.lineTo(p2[0],p2[1]);tx.moveTo(p3[0],p3[1]);tx.lineTo(p4[0],p4[1]);tx.stroke(); label(name,Wp([x,ARM-48]),"#dbe3ea","center",true,13);};
+  iris(ARM+Z_I3+80,"I3"); const bk=Wp([ARM+470,ARM]); tx.strokeStyle="#8b99a7";tx.lineWidth=1.5;tx.beginPath();tx.moveTo(bk[0]-6,bk[1]+14);tx.lineTo(bk[0]+2,bk[1]-14);tx.moveTo(bk[0]+4,bk[1]+14);tx.lineTo(bk[0]+12,bk[1]-14);tx.stroke(); iris(ARM+530,"I4 (1 m)");
+  const cx=ARM+30+Math.min(S.zcam,300)*0.25, cq=Wp([cx,ARM]); tx.fillStyle="#2c3a48"; tx.fillRect(cq[0],cq[1]-26,16,52); tx.fillStyle="#58708a"; tx.fillRect(cq[0],cq[1]-20,4,40);
+  label(`camera · ${S.zcam} mm`,Wp([cx+30,ARM-78]),"#dbe3ea","center",true,13);
+  label("Arm A · reference",Wp([-90,170]),css("--hene"),"center"); label("Arm B · object",Wp([160,-85]),css("--armb"),"center");
+}
+
+// ---------------------------------------------------------------- iris views (±8 mm)
+function drawIris(cv,A,B){
+  const g=cv.getContext("2d"),w=cv.width,h=cv.height,R=8,sc=w/(2*R); const img=g.createImageData(w,h),D=img.data, hole=S.closed?1.0:5.5, blade=7.2, W0=2.5;
+  const beams=[]; if(!S.blockA)beams.push([A,[255,59,47]]); if(!S.blockB)beams.push([B,[255,176,46]]);
+  for(let j=0;j<h;j++)for(let i=0;i<w;i++){const x=(i+.5)/sc-R, y=R-(j+.5)/sc, r=Math.hypot(x,y), k=(j*w+i)*4; let rr=0,gg=0,bb=0;
+    for(const [b,c] of beams){const I=Math.exp(-2*((x-b.h)**2+(y-b.y)**2)/W0**2); rr+=c[0]*I;gg+=c[1]*I;bb+=c[2]*I;}
+    const f=(r>hole&&r<blade)?[52,58,64,.9]:[11,14,17,.35]; D[k]=Math.min(255,f[0]+rr*f[3]);D[k+1]=Math.min(255,f[1]+gg*f[3]);D[k+2]=Math.min(255,f[2]+bb*f[3]);D[k+3]=255;}
+  g.putImageData(img,0,0); g.strokeStyle="#8b99a7";g.lineWidth=1;g.beginPath();g.arc(w/2,h/2,hole*sc,0,7);g.stroke(); g.strokeStyle="#34404c";g.beginPath();g.arc(w/2,h/2,blade*sc,0,7);g.stroke();
+  for(const [b,c] of beams){const px=w/2+b.h*sc,py=h/2-b.y*sc; if(px<0||px>w||py<0||py>h){const a=Math.atan2(-b.y,b.h); g.fillStyle=`rgb(${c})`; g.beginPath(); g.arc(w/2+Math.cos(a)*(w/2-10),h/2-Math.sin(a)*(h/2-10),5,0,7); g.fill(); continue;}
+    g.strokeStyle=`rgb(${c})`;g.lineWidth=1.5;g.beginPath();g.moveTo(px-6,py);g.lineTo(px+6,py);g.moveTo(px,py-6);g.lineTo(px,py+6);g.stroke();}
+  g.fillStyle="#8b99a7";g.font=`12px ${css("--mono")}`;g.textAlign="left";g.fillText("±8 mm",6,h-8);
+}
+
+// ---------------------------------------------------------------- render
+function recon(){const N=S.N, Am=new Float64Array(N*N), Ph=new Float64Array(N*N); for(let q=0;q<N*N;q++){Am[q]=Math.hypot(last.O.re[q],last.O.im[q]); Ph[q]=Math.atan2(last.O.im[q],last.O.re[q]);} return {Am,Ph};}
+function drawAll(){
+  const L=last, N=S.N;
+  drawTable();
+  const A3=trace("A",Z_I3),B3=trace("B",Z_I3),A4=trace("A",Z_I4),B4=trace("B",Z_I4);
+  drawIris($("i3"),A3,B3); drawIris($("i4"),A4,B4);
+  $("i3r").textContent=`A ${dd(A3).toFixed(2)} · B ${dd(B3).toFixed(2)} mm`; $("i4r").textContent=`A ${dd(A4).toFixed(2)} · B ${dd(B4).toFixed(2)} mm`;
+  let hm=0; for(let q=0;q<N*N;q++) if(L.H[q]>hm) hm=L.H[q];
+  paint($("cam"),N,L.H,"hene",0,hm||1); scaleBar($("cam"),S.px*N/$("cam").width,"µm");
+  const th=Math.hypot(L.B.ah-L.A.ah,L.B.av-L.A.av), fc=th/LAM_MM;
+  $("camr").textContent=(S.blockA||S.blockB)?"one arm blocked":fc*S.px*N*1e-3<1?"on-axis":`fringe ${(1000/fc).toFixed(1)} µm = ${(1000/fc/S.px).toFixed(1)} px`;
+  const logm=new Float64Array(N*N); let lmax=-99; for(let j=0;j<N;j++)for(let i=0;i<N;i++){const q=j*N+i, v=Math.log10(L.hr[q]**2+L.hi[q]**2+1e-30); logm[((j+N/2)%N)*N+((i+N/2)%N)]=v; if(v>lmax) lmax=v;}
+  paint($("fft"),N,logm,"fourier",lmax-8,lmax);
+  { const cv=$("fft"), g=cv.getContext("2d"), W=cv.width, s=W/N;
+    const px=(L.ci+N/2)*s, py=(L.cj+N/2)*s; g.strokeStyle=css("--fourier"); g.lineWidth=2; g.beginPath(); g.arc(px,py,L.rb*s,0,7); g.stroke();
+    g.setLineDash([5,5]); g.strokeStyle="rgba(232,163,59,.85)"; g.lineWidth=1.3; g.beginPath(); g.arc(W/2,W/2,2*L.fobj*L.binPerF*s,0,7); g.stroke(); g.setLineDash([]);
+    const f=Math.max(11,Math.round(W/34)); g.fillStyle="rgba(219,227,234,.85)"; g.font=`${f}px ${css("--mono")}`; g.textAlign="left"; g.fillText(`±${L.nyq.toFixed(0)} /mm (Nyquist)`,8,W-10); }
+  $("fftr").textContent=L.found?"+1 order found":S.auto?"no order found":"predicted position";
+  const t=L.smp.truth, dx=S.px/S.M, W=$("c-truth").width;
+  const tw=new Float64Array(N*N); for(let q=0;q<N*N;q++) tw[q]=t.amp[q]<0.05?NaN:wrap(t.ph[q]);
+  paint($("c-truth"),N,tw,"phase",-Math.PI,Math.PI); scaleBar($("c-truth"),dx*N/W,"µm"); $("l-truth").textContent=`${(dx*N).toFixed(0)} µm field`;
+  const {Am,Ph}=recon();
+  paint($("c-ramp"),N,Am,"grey",0,1.6); scaleBar($("c-ramp"),dx*N/W,"µm");
+  paint($("c-rph"),N,Ph,"phase",-Math.PI,Math.PI); scaleBar($("c-rph"),dx*N/W,"µm");
+  $("l-ramp").textContent=S.blank?"÷ blank":"raw"; $("l-rph").textContent=S.rdz?`refocused ${S.rdz>0?"+":""}${S.rdz} µm`:"no refocus";
+  drawProfile(Am,Ph); readouts(th,fc,A3,B3,A4,B4);
+}
+function drawProfile(Am,Ph){
+  const cv=$("c-prof"), g=cv.getContext("2d"), W=cv.width, H=cv.height, N=S.N, t=last.smp.truth, dx=S.px/S.M; g.clearRect(0,0,W,H); g.fillStyle="#0b0e11"; g.fillRect(0,0,W,H);
+  const j=Math.max(0,Math.min(N-1,Math.round(N/2-S.row*N))), useAmp=S.stype==="dust";
+  const ml=44,mr=10,mt=14,mb=30,pw=W-ml-mr,ph=H-mt-mb, lo=useAmp?0:-Math.PI, hi=useAmp?1.5:Math.PI;
+  const Y=v=>mt+ph*(1-(v-lo)/(hi-lo)), X=i=>ml+pw*i/(N-1);
+  g.strokeStyle="#2b3540"; g.fillStyle=css("--muted"); g.font=`12px ${css("--mono")}`; g.textAlign="right"; g.textBaseline="middle";
+  (useAmp?[[0,"0"],[0.5,"0.5"],[1,"1"],[1.5,"1.5"]]:[[-Math.PI,"−π"],[-Math.PI/2,"−π/2"],[0,"0"],[Math.PI/2,"π/2"],[Math.PI,"π"]]).forEach(([v,s])=>{g.beginPath();g.moveTo(ml,Y(v));g.lineTo(W-mr,Y(v));g.stroke();g.fillText(s,ml-5,Y(v));});
+  g.textAlign="center"; g.textBaseline="top"; const half=N*dx/2; [-1,0,1].forEach(f=>g.fillText((f*half).toFixed(0)+" µm",ml+pw*(f+1)/2,H-mb+8));
+  const line=(fn,col,lw,dash)=>{g.strokeStyle=col;g.lineWidth=lw;g.setLineDash(dash||[]);g.beginPath();let st=false;for(let i=0;i<N;i++){const v=fn(i); if(v!==v){st=false;continue;} const y=Y(Math.max(lo,Math.min(hi,v))); st?g.lineTo(X(i),y):g.moveTo(X(i),y); st=true;}g.stroke();g.setLineDash([]);};
+  line(i=>useAmp?t.amp[j*N+i]:wrap(t.ph[j*N+i]),css("--truth"),2,[5,4]);
+  line(i=>useAmp?Am[j*N+i]:Ph[j*N+i],css("--focus"),1.5);
+  $("l-prof").textContent=`y = ${(S.row*N*dx).toFixed(1)} µm`;
+}
+function ro(el,items){$(el).innerHTML=items.map(([k,v,s,c])=>`<div class="ro ${c||""}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s||""}</div></div>`).join("");}
+function readouts(th,fc,A3,B3,A4,B4){
+  const L=last, fx=Math.abs(L.fx), fy=Math.abs(L.fy), fobj=L.fobj, nyq=L.nyq;
+  const sepOK=fc>=3*fobj, fitOK=fx+fobj<=nyq && fy+fobj<=nyq, off=Math.hypot(L.A.h-L.B.h,L.A.y-L.B.y);
+  const N=S.N, t=L.smp.truth, band=L.smp.band; let e=0,c=0;
+  if(S.stype!=="dust"&&S.stype!=="none"){ // rms after removing the mean (piston) difference
+    let sr=0,si=0; for(let j=N/8;j<7*N/8;j+=2)for(let i=N/8;i<7*N/8;i+=2){const q=j*N+i; const d=Math.atan2(L.O.im[q],L.O.re[q])-Math.atan2(band.im[q],band.re[q]); sr+=Math.cos(d); si+=Math.sin(d);}
+    const pist=Math.atan2(si,sr);
+    for(let j=N/8;j<7*N/8;j+=2)for(let i=N/8;i<7*N/8;i+=2){const q=j*N+i; const d=wrap(Math.atan2(L.O.im[q],L.O.re[q])-Math.atan2(band.im[q],band.re[q])-pist); e+=d*d; c++;} }
+  const rms=Math.sqrt(e/Math.max(c,1));
+  ro("ro1",[
+    ["Beam angle θ",`${(th*1e3).toFixed(2)} mrad`,"reference vs. object beam"],
+    ["Carrier",`${fc.toFixed(1)} /mm`,`fx ${L.fx.toFixed(1)} · fy ${L.fy.toFixed(1)} /mm`],
+    ["Object bandwidth",`${fobj.toFixed(1)} /mm`,"NA / (λ·M) at the camera"],
+    ["Nyquist",`${nyq.toFixed(0)} /mm`,"1 / (2 × pixel pitch)"],
+    ["Order separation",sepOK?"clear":"overlaps centre",`needs carrier ≥ ${(3*fobj).toFixed(0)} /mm`,sepOK?"good":"badv"],
+    ["Order in frame",fitOK?"yes":"aliased","carrier + bandwidth ≤ Nyquist",fitOK?"good":"badv"],
+    ["Beam offset",`${off.toFixed(2)} mm`,`beam radius ${S.W} mm at the camera`,off>S.W*0.8?"warnv":""],
+    ["Compute",`${L.t.toFixed(0)} ms`,`${N}×${N} px`],
+  ]);
+  ro("ro2",[
+    ["Field of view",`${(N*S.px/S.M).toFixed(0)} µm`,"sensor / M"],
+    ["Sample pixel",`${(S.px/S.M*1000).toFixed(0)} nm`,"pixel / M"],
+    ["Resolution",`${(LAM/S.NA).toFixed(2)} µm`,"coherent cut-off period λ/NA"],
+    ["Phase error",c?`${rms.toFixed(3)} rad`:"—",c?`rms vs. NA-limited truth (${(rms*632.8/(2*Math.PI)).toFixed(1)} nm)`:"phase sample needed",!c?"":rms<0.1?"good":rms<0.3?"warnv":"badv"],
+  ]);
+  const tol=0.25, okA=dd(A3)<tol&&dd(A4)<tol, okB=dd(B3)<tol&&dd(B4)<tol, onAxis=th<1e-4&&!S.blockA&&!S.blockB;
+  $("s1").classList.toggle("done",okA); $("s2").classList.toggle("done",okB); $("s3").classList.toggle("done",okA&&okB&&onAxis); $("s4").classList.toggle("done",sepOK&&fitOK&&!S.blockA&&!S.blockB);
+  const st=$("status");
+  if(S.blockA||S.blockB){st.className="pill warn"; st.textContent="One arm blocked: no hologram";}
+  else if(sepOK&&fitOK&&off<S.W){st.className="pill ok"; st.textContent=c?`Off-axis hologram OK · phase error ${rms.toFixed(2)} rad`:"Off-axis hologram OK";}
+  else if(!fitOK){st.className="pill bad"; st.textContent="Carrier too high: +1 order aliased";}
+  else if(onAxis){st.className="pill warn"; st.textContent="On-axis: add a carrier (tilt BS2)";}
+  else {st.className="pill warn"; st.textContent="Orders overlap: increase the off-axis angle";}
+}
+
+// ---------------------------------------------------------------- scheduling and buttons
+let pending=false;
+schedule=()=>{ if(pending) return; pending=true; requestAnimationFrame(()=>{pending=false; simulate(); drawAll();}); };
+function toggle(btn,key,on,offl){btn.addEventListener("click",()=>{S[key]=!S[key]; btn.setAttribute("aria-pressed",S[key]); if(on) btn.textContent=S[key]?on:offl; schedule();});}
+toggle($("blockA"),"blockA"); toggle($("blockB"),"blockB"); toggle($("irises"),"closed","Irises closed","Irises open");
+$("perfect").addEventListener("click",()=>{for(const e of EL){S[e].h=0;S[e].v=0;} syncMounts(); schedule();});
+$("scramble").addEventListener("click",()=>{for(const e of EL){S[e].h=(Math.random()*2-1)*1.2e-3;S[e].v=(Math.random()*2-1)*1.2e-3;} syncMounts(); schedule();});
+$("offaxis").addEventListener("click",()=>{
+  // diagonal carrier halfway between 3× the object bandwidth and the Nyquist limit
+  const p=S.px*1e-3, nyq=1/(2*p), fobj=S.NA/(LAM_MM*S.M), lo=3.15*fobj, hiF=Math.SQRT2*(nyq-fobj);
+  const fc=lo<=hiF?(lo+hiF)/2:hiF, comp=fc/Math.SQRT2*LAM_MM;               // beam angle per axis (rad)
+  for(const e of EL){S[e].h=0;S[e].v=0;}
+  S.BS2.h=-Math.min(TILT*1e-3,comp/2); S.BS2.v=Math.min(TILT*1e-3,comp/2);      // reflection doubles the angle
+  syncMounts(); schedule();
+});
+{const c=$("cbar").getContext("2d"); for(let i=0;i<140;i++){const v=LUT[Math.round(i/139*255)]; c.fillStyle=`rgb(${v})`; c.fillRect(i,0,1,10);}}
+
+buildSampleUI();
+$("offaxis").click();
+})();
+</script>
+
+</body>
+</html>

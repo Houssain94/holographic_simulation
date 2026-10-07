@@ -1,0 +1,1210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GPU Holography Bench</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: control rack left, optical path + four image panels right. Same anodised-bench look as the Mach–Zehnder bench; beam colour follows the chosen wavelength. */
+:root{
+  --table:#161b21; --panel:#1e252d; --panel2:#252e37; --line:#34404c; --hole:#0f1317;
+  --fg:#dbe3ea; --muted:#8b99a7; --beam:#3ddc6b; --accent:#7cc4ff; --ok:#4cc38a; --warn:#e8a33b; --bad:#ef5b5b; --truth:#e8a33b;
+  --display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+html,body{background:var(--table);color:var(--fg)}
+body{font-family:var(--display);font-size:15px;line-height:1.45;padding-inline:16px;padding-block:18px 40px}
+.wrap{max-width:1500px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+h1{font-size:1.7rem;font-weight:700;letter-spacing:.01em;margin:0;text-wrap:balance}
+.sub{color:var(--muted);margin:2px 0 0;font-size:.95rem}
+.pill{font-family:var(--mono);font-size:.82rem;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--panel);white-space:nowrap}
+.pill.ok{border-color:var(--ok);color:var(--ok)} .pill.warn{border-color:var(--warn);color:var(--warn)} .pill.bad{border-color:var(--bad);color:var(--bad)}
+.layout{display:grid;grid-template-columns:350px minmax(0,1fr);gap:16px;align-items:start}
+.side,.main{display:flex;flex-direction:column;gap:16px;min-width:0}
+@media (max-width:1000px){.layout{grid-template-columns:minmax(0,1fr)}.side{order:2}}
+.gpuTag{font-family:var(--mono);font-size:.7rem;font-weight:500;vertical-align:middle;border:1px solid var(--accent);color:var(--accent);border-radius:6px;padding:2px 7px;margin-left:6px}
+.hdrR{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#gate{position:fixed;inset:0;background:rgba(10,13,16,.78);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px}
+#gate[hidden]{display:none}
+#gate .box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px;max-width:640px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+#gate h2{margin:0 0 4px;font-size:1.25rem}
+#gate .lead{color:var(--muted);margin:0 0 14px;font-size:.92rem}
+#gate ol{list-style:none;padding:0;margin:0 0 14px;display:flex;flex-direction:column;gap:8px}
+#gate li{display:grid;grid-template-columns:22px 1fr;gap:8px;align-items:start;font-size:.92rem}
+#gate li .ic{font-family:var(--mono);text-align:center;color:var(--muted)}
+#gate li[data-s=ok] .ic{color:var(--ok)} #gate li[data-s=warn] .ic{color:var(--warn)} #gate li[data-s=fail] .ic{color:var(--bad)} #gate li[data-s=run] .ic{color:var(--accent)}
+#gate li .d{display:block;color:var(--muted);font-family:var(--mono);font-size:.78rem;overflow-wrap:anywhere}
+#gate .verdict{padding:10px 12px;border-radius:8px;border:1px solid var(--line);margin-bottom:14px;font-size:.92rem}
+#gate .verdict.ok{border-color:var(--ok)} #gate .verdict.warn{border-color:var(--warn)} #gate .verdict.bad{border-color:var(--bad)}
+#gate .btns{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0}
+.card h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:0 0 10px;font-weight:600}
+canvas{display:block;width:100%;height:auto;border-radius:6px}
+#setup{background:var(--hole)}
+.imgs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+@media (max-width:1250px){.imgs{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.im{display:flex;flex-direction:column;gap:6px;min-width:0}
+.im .lab{display:flex;flex-wrap:wrap;gap:0 8px;justify-content:space-between;font-family:var(--mono);font-size:.76rem;color:var(--muted);min-height:2.4em;align-content:flex-start}
+.im .lab b{color:var(--fg);font-weight:500}
+.im canvas{background:#000;aspect-ratio:1/1}
+.readout{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.ro{background:var(--panel2);border-radius:6px;padding:8px 10px}
+.ro .k{font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+.ro .v{font-family:var(--mono);font-size:.95rem;font-variant-numeric:tabular-nums}
+.ro .s{font-size:.72rem;color:var(--muted)}
+.ro.lim{outline:1px solid var(--warn)}
+.knob{display:grid;grid-template-columns:5.6em minmax(0,1fr) 6.4em;align-items:center;gap:8px;margin-top:8px}
+.knob.sel{grid-template-columns:5.2em minmax(0,1fr)}
+.knob label{font-size:.8rem;color:var(--muted)}
+.knob output{font-family:var(--mono);font-size:.8rem;text-align:right;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--accent);min-width:0}
+input[type=checkbox]{accent-color:var(--accent)}
+.chk{display:flex;gap:8px;align-items:center;margin-top:8px;font-size:.85rem}
+button{font:inherit;font-size:.85rem;color:var(--fg);background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:6px 10px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button:disabled{opacity:.5;cursor:default}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:color-mix(in srgb,var(--accent) 18%,var(--panel2));border-color:color-mix(in srgb,var(--accent) 60%,var(--line))}
+button[aria-pressed=true]{background:color-mix(in srgb,var(--accent) 25%,var(--panel2));border-color:var(--accent)}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+select{font:inherit;font-size:.85rem;background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:5px 8px;min-width:0;width:100%}
+input.num{width:100%;min-width:0;font-family:var(--mono);font-size:.8rem;text-align:right;background:var(--hole);color:var(--fg);border:1px solid var(--line);border-radius:5px;padding:3px 5px;font-variant-numeric:tabular-nums}
+input.num:focus{border-color:var(--accent)}
+.unit{font-family:var(--mono);font-size:.7rem;color:var(--muted);white-space:nowrap}
+.numwrap{display:flex;align-items:center;gap:4px;min-width:0}
+.side .card>h2{cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;user-select:none;margin-bottom:10px}
+.side .card>h2::after{content:"";width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);transition:transform .15s;margin-right:4px;flex:none}
+.side .card.collapsed>h2{margin-bottom:0}
+.side .card.collapsed>h2::after{transform:rotate(-45deg)}
+.side .card>h2:hover{color:var(--fg)}
+.side .card>h2:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
+.side .card.collapsed>:not(h2){display:none!important}
+.sidetools{display:flex;gap:8px;justify-content:flex-end}
+.sidetools button{font-size:.78rem;padding:4px 10px}
+.note{color:var(--muted);font-size:.82rem;margin:8px 0 0}
+.subh{font-size:.72rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:14px 0 0;border-top:1px solid var(--line);padding-top:10px}
+progress{width:100%;height:8px;accent-color:var(--accent)}
+.legend{display:flex;gap:14px;font-family:var(--mono);font-size:.76rem;color:var(--muted);flex-wrap:wrap}
+.legend i{display:inline-block;width:18px;height:2px;vertical-align:middle;margin-right:5px}
+.two{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:16px}
+@media (max-width:1250px){.two{grid-template-columns:minmax(0,1fr)}}
+.explain p{margin:0 0 8px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+
+<div id="gate" role="dialog" aria-modal="true" aria-labelledby="gateT"><div class="box">
+  <h2 id="gateT">GPU check</h2>
+  <p class="lead">Before the simulation starts, this page checks that WebGPU works on this computer and that its results match the 64-bit CPU code.</p>
+  <ol id="gateList">
+    <li data-k="api"><span class="ic">·</span><span>WebGPU available in this browser<span class="d"></span></span></li>
+    <li data-k="dev"><span class="ic">·</span><span>GPU adapter, device and shaders<span class="d"></span></span></li>
+    <li data-k="fft2"><span class="ic">·</span><span>2-D FFT, 256 × 256 (radix-2) against the CPU<span class="d"></span></span></li>
+    <li data-k="fftb"><span class="ic">·</span><span>2-D FFT, 152 × 152 (Bluestein, the path used for 1064/2128) against the CPU<span class="d"></span></span></li>
+    <li data-k="prop"><span class="ic">·</span><span>Angular-spectrum propagation against the CPU<span class="d"></span></span></li>
+    <li data-k="speed"><span class="ic">·</span><span>Speed, 1024 × 1024 propagation: GPU vs CPU<span class="d"></span></span></li>
+  </ol>
+  <div id="verdict" class="verdict" hidden></div>
+  <div class="btns"><button id="useCpu" hidden>Use CPU instead</button><button id="useGpu" class="primary" hidden>Start on GPU</button></div>
+</div></div>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Lensless Holography Bench <span class="gpuTag">WebGPU</span></h1>
+      <p class="sub">Inline (Gabor) digital holographic microscope with a point source: laser → pinhole → sample → camera. No lenses between sample and camera. FFTs, propagation and the twin-image loop run on your GPU after a start-up check.</p>
+    </div>
+    <div class="hdrR"><span id="engine" class="pill">engine: checking…</span><button id="retest">GPU check</button><span id="status" class="pill">waiting for GPU check…</span></div>
+  </header>
+
+  <div class="layout">
+    <aside class="side" aria-label="Parameters">
+      <div class="sidetools"><button id="collapseAll">Collapse all</button><button id="expandAll">Expand all</button></div>
+      <section class="card">
+        <h2>Presets</h2>
+        <div class="knob sel"><label for="preset">Setup</label>
+          <select id="preset"><option value="default">Default: lens + 1 µm pinhole, 20× magnification</option><option value="mysetup">Your setup: no lens, 500 µm pinhole, 6 cm + 1 cm, 100 µm objects</option><option value="chen">Chen et al. 2025 (Electronics): no lens, 40 µm pinhole, sample 1 mm from sensor</option><option value="chenlam">Chen &amp; Lam 2025 (Opt. Lett.): fibre source, 0.9 µm pixels, pixel super-resolution</option></select></div>
+        <div class="bar" style="margin-top:8px"><button id="loadPreset" class="primary">Load preset</button></div>
+        <p class="note" id="presetNote">Loads all settings, then sets the exposure automatically. Camera pixel size for “Your setup” is assumed (5.5 µm); change it to your camera’s value.</p>
+      </section>
+      <section class="card">
+        <h2>Source</h2>
+        <div class="knob sel"><label for="src">Source type</label>
+          <select id="src"><option value="laser" selected>free-space laser beam (+ lens / pinhole)</option><option value="fiber">single-mode fibre tip (pigtailed laser diode)</option></select></div>
+        <div class="knob sel"><label for="lam">Laser</label>
+          <select id="lam"><option value="0.405">405 nm (violet diode)</option><option value="0.532" selected>532 nm (green DPSS)</option><option value="0.6328">632.8 nm (He–Ne)</option></select></div>
+        <div id="fiberOpts" hidden>
+          <div class="knob"><label for="mfd">Mode field Ø</label><input id="mfd" type="range" min="1" max="10" step="0.1" value="3.3"><span class="numwrap"><input class="num" id="mfd-o" type="number" step="any" aria-label="mode field diameter in µm"><span class="unit">µm</span></span></div>
+          <p class="note">The fibre core is the point source: a clean Gaussian cone with NA ≈ λ/(π·MFD/2). A single-mode fibre is itself a spatial filter, so no pinhole is needed.</p>
+        </div>
+        <div id="laserOpts">
+        <div class="knob"><label for="Db">Laser beam Ø</label><input id="Db" type="range" min="0.1" max="10" step="0.05" value="2"><span class="numwrap"><input class="num" id="Db-o" type="number" step="any" aria-label="Db value"><span class="unit">mm</span></span></div>
+        <label class="chk"><input type="checkbox" id="lens" checked> Focusing lens before the pinhole</label>
+        <div id="naRow">
+          <div class="knob"><label for="fl">Lens focal length</label><input id="fl" type="range" min="1" max="50" step="0.1" value="4"><span class="numwrap"><input class="num" id="fl-o" type="number" step="any" aria-label="fl value"><span class="unit">mm</span></span></div>
+          <div class="knob"><label for="sl">Lens → pinhole s</label><input id="sl" type="range" min="0.5" max="60" step="0.001" value="4"><span class="numwrap"><input class="num" id="sl-o" type="number" step="0.001" aria-label="lens to pinhole distance in mm"><span class="unit">mm</span></span></div>
+          <div class="bar" style="margin-top:6px"><button id="sEqF">Focus on the pinhole (s = f)</button><button data-ds="-0.01">−10 µm</button><button data-ds="-0.001">−1 µm</button><button data-ds="0.001">+1 µm</button><button data-ds="0.01">+10 µm</button></div>
+          <div class="knob"><label for="NA">Lens NA (aperture)</label><input id="NA" type="range" min="0.05" max="0.9" step="0.01" value="0.5"><span class="numwrap"><input class="num" id="NA-o" type="number" step="any" aria-label="NA value"><span class="unit"></span></span></div>
+        </div>
+        <label class="chk"><input type="checkbox" id="pin" checked> Pinhole in place</label>
+        <div class="knob"><label for="dp">Pinhole Ø</label><input id="dp" type="range" min="0" max="1000" step="1" value="300"><span class="numwrap"><input class="num" id="dp-o" type="number" step="any" aria-label="dp value"><span class="unit">µm</span></span></div>
+        <div class="knob"><label for="dirt">Dirt on optics</label><input id="dirt" type="range" min="0" max="1" step="0.01" value="0.4"><span class="numwrap"><input class="num" id="dirt-o" type="number" step="any" aria-label="dirt value"><span class="unit">0–1</span></span></div>
+        </div>
+        <p class="note"><b>Lens → pinhole s:</b> at s = f the focus sits in the pinhole. Beyond a few Rayleigh ranges (z_R is shown under “Beam at pinhole”) the beam in the pinhole is much wider than the focus: a small pinhole passes less light, and a large pinhole no longer defines the source, the focus does. <b>Beam Ø</b> (1/e²) sets the working NA = min(lens NA, beam radius / f) with the lens, or how much light reaches the pinhole without it. The side view exaggerates the focus offset.</p>
+      </section>
+
+      <section class="card">
+        <h2>Geometry and camera</h2>
+        <div class="knob"><label for="z1">Pinhole → sample z₁</label><input id="z1" type="range" min="0" max="1000" step="1" value="300"><span class="numwrap"><input class="num" id="z1-o" type="number" step="any" aria-label="z1 value"><span class="unit">mm</span></span></div>
+        <div class="knob"><label for="L">Pinhole → camera L</label><input id="L" type="range" min="2" max="300" step="0.1" value="10"><span class="numwrap"><input class="num" id="L-o" type="number" step="any" aria-label="L value"><span class="unit">mm</span></span></div>
+        <div class="knob"><label for="px">Pixel pitch</label><input id="px" type="range" min="0.5" max="10" step="0.01" value="5.5"><span class="numwrap"><input class="num" id="px-o" type="number" step="any" aria-label="px value"><span class="unit">µm</span></span></div>
+        <div class="knob sel"><label for="N">Sensor</label>
+          <select id="N"><option value="256">256 × 256 px (fast)</option><option value="512" selected>512 × 512 px</option><option value="1024">1024 × 1024 px (slow)</option><option value="1064">1064 × 1064 px (slow)</option><option value="2048">2048 × 2048 px</option><option value="2128">2128 × 2128 px (high memory)</option></select></div>
+        <p class="note">With pixel super-resolution on, this is the fine (reconstruction) grid; the physical sensor has N/K × N/K pixels of the pitch above.</p>
+        <div class="knob" id="noiseRow"><label for="noise">Camera noise</label><input id="noise" type="range" min="0" max="5" step="0.1" value="1"><span class="numwrap"><input class="num" id="noise-o" type="number" step="any" aria-label="noise value"><span class="unit">%</span></span></div>
+        <label class="chk"><input type="checkbox" id="bgdiv" checked> Use the background image (recorded without sample) as the reference</label>
+      </section>
+
+      <section class="card">
+        <h2>Photon budget</h2>
+        <label class="chk"><input type="checkbox" id="phot" checked> Simulate photons (shot noise, read noise, saturation, bit depth)</label>
+        <div id="photRows">
+          <div class="knob"><label for="P">Laser power</label><input id="P" type="range" min="0" max="1000" step="1" value="500"><span class="numwrap"><input class="num" id="P-o" type="number" step="any" aria-label="laser power in mW"><span class="unit">mW</span></span></div>
+          <div class="knob"><label for="texp">Exposure</label><input id="texp" type="range" min="0" max="1000" step="1" value="300"><span class="numwrap"><input class="num" id="texp-o" type="number" step="any" aria-label="exposure in ms"><span class="unit">ms</span></span></div>
+          <div class="knob"><label for="QE">Quantum eff.</label><input id="QE" type="range" min="0.05" max="0.95" step="0.01" value="0.6"><span class="numwrap"><input class="num" id="QE-o" type="number" step="any" aria-label="quantum efficiency"><span class="unit"></span></span></div>
+          <div class="knob"><label for="FW">Full well</label><input id="FW" type="range" min="1000" max="60000" step="100" value="10000"><span class="numwrap"><input class="num" id="FW-o" type="number" step="any" aria-label="full well in electrons"><span class="unit">e⁻</span></span></div>
+          <div class="knob"><label for="rn">Read noise</label><input id="rn" type="range" min="0" max="30" step="0.1" value="3"><span class="numwrap"><input class="num" id="rn-o" type="number" step="any" aria-label="read noise in electrons"><span class="unit">e⁻</span></span></div>
+          <div class="knob sel"><label for="bits">Bit depth</label><select id="bits"><option value="8">8 bit</option><option value="10">10 bit</option><option value="12" selected>12 bit</option><option value="16">16 bit</option></select></div>
+          <div class="bar" style="margin-top:8px"><button id="autoExp" class="primary">Auto exposure (peak at 80 % full well)</button></div>
+          <p class="note">A photon at 532 nm carries 3.7·10⁻¹⁹ J, so 1 mW for 1 ms is about 2.7·10¹² photons. The images are still shown scaled to their own brightness; check “Signal” and “SNR” in System numbers.</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Pixel super-resolution</h2>
+        <label class="chk"><input type="checkbox" id="psr"> Record K × K holograms with sub-pixel shifts (source moved between shots)</label>
+        <div id="psrRows" hidden>
+          <div class="knob sel"><label for="K">Upsampling K</label><select id="K"><option value="2" selected>2 (4 frames)</option><option value="3">3 (9 frames)</option><option value="4">4 (16 frames)</option><option value="5">5 (25 frames)</option></select></div>
+          <div class="knob sel"><label for="psrMode">Reconstruct from</label><select id="psrMode"><option value="psr" selected>all frames (shift-and-add PSR)</option><option value="single">one frame only (native pixels)</option></select></div>
+          <p class="note">Each frame is integrated over the physical pixels; moving the source shifts the hologram by a fraction of a pixel. Shift-and-add interleaves the frames on a K× finer grid, then the usual reconstruction runs. This is the classic PSR method with known shifts, simpler than the differentiable joint optimisation of Chen &amp; Lam (2025), which also estimates the shifts and the distance.</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Sample</h2>
+        <div class="knob sel"><label for="stype">Sample</label>
+          <select id="stype">
+            <option value="text" selected>glass plate with etched pattern</option>
+            <option value="uniform">uniform glass plate</option>
+            <option value="edge">glass plate edge / thin-film step</option>
+            <option value="beads">microspheres (beads)</option>
+            <option value="rbc">red blood cells</option>
+            <option value="dust">opaque particles (dust)</option>
+            <option value="bars">chrome bar target</option>
+            <option value="pbars">phase bar target (USAF-like)</option>
+          </select></div>
+        <div id="sparams"></div>
+        <p class="note" id="sinfo"></p>
+      </section>
+
+      <section class="card">
+        <h2>Reconstruction</h2>
+        <div class="knob"><label for="dz">Refocus Δz</label><input id="dz" type="range" min="-300" max="300" step="5" value="0"><span class="numwrap"><input class="num" id="dz-o" type="number" step="any" aria-label="dz value"><span class="unit">µm</span></span></div>
+        <div class="knob sel"><label for="cons">Constraint</label>
+          <select id="cons"><option value="phase">phase object (|t| = 1, delay ≥ 0)</option><option value="abs">absorbing object (|t| ≤ 1)</option></select></div>
+        <div class="knob"><label for="iters">Iterations</label><input id="iters" type="range" min="5" max="100" step="5" value="60"><span class="numwrap"><input class="num" id="iters-o" type="number" step="any" aria-label="iters value"><span class="unit"></span></span></div>
+        <div class="bar" style="margin-top:10px"><button id="runIt" class="primary">Remove twin image</button><button id="resetIt">Back to direct</button></div>
+        <progress id="prog" value="0" max="1" hidden></progress>
+        <p class="note">Direct reconstruction back-propagates the hologram to the sample plane. Its twin image appears as ghost fringes around the object. The iterative step (Gerchberg–Saxton with an object-plane constraint) removes most of it. The phase constraint assumes the sample delays light by 0 to π relative to the background; stronger objects wrap and need the absorbing constraint or a thinner sample.</p>
+      </section>
+    </aside>
+
+    <main class="main">
+      <section class="card">
+        <h2>Optical path, side view <span style="text-transform:none;letter-spacing:0">(not to scale)</span></h2>
+        <canvas id="setup" width="1000" height="230" aria-label="Side view of the lensless holographic microscope"></canvas>
+      </section>
+
+      <section class="card">
+        <h2>Images</h2>
+        <div class="imgs">
+          <div class="im"><div class="lab"><span><b>Hologram</b> · camera</span><span id="l-holo"></span></div><canvas id="c-holo" width="400" height="400"></canvas></div>
+          <div class="im"><div class="lab"><span><b>Sample</b> · ground truth</span><span id="l-truth"></span></div><canvas id="c-truth" width="400" height="400"></canvas></div>
+          <div class="im"><div class="lab"><span><b>Reconstruction</b> · amplitude</span><span id="l-ramp"></span></div><canvas id="c-ramp" width="400" height="400"></canvas></div>
+          <div class="im"><div class="lab"><span><b>Reconstruction</b> · phase</span><span id="l-rph"></span></div><canvas id="c-rph" width="400" height="400"></canvas></div>
+        </div>
+        <div class="bar" style="margin-top:10px">
+          <span class="legend">Zoom <select id="zoom" style="width:auto;margin-left:6px"><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option><option value="8">8×</option><option value="16">16×</option></select></span>
+          <span class="legend">Truth shows <button id="tShow" aria-pressed="false" style="margin-left:6px">phase</button></span>
+          <span style="flex:1"></span>
+          <span class="legend">Phase colour: −π <canvas id="cbar" width="160" height="10" style="width:160px;display:inline-block;vertical-align:middle;margin:0 6px"></canvas> +π</span>
+        </div>
+      </section>
+
+      <div class="two">
+        <section class="card">
+          <h2>Line profile through the sample</h2>
+          <canvas id="c-prof" width="800" height="260"></canvas>
+          <div class="knob" ><label for="row">Row y</label><input id="row" type="range" min="-0.5" max="0.5" step="0.005" value="0"><span class="numwrap"><input class="num" id="row-o" type="number" step="any" aria-label="row value"><span class="unit">µm</span></span></div>
+          <div class="legend" style="margin-top:6px"><span><i style="background:var(--truth)"></i>ground truth</span><span><i style="background:var(--accent)"></i>reconstruction</span></div>
+        </section>
+        <section class="card">
+          <h2>System numbers</h2>
+          <div class="readout" id="ro"></div>
+        </section>
+      </div>
+
+      <section class="card explain">
+        <h2>How this microscope works</h2>
+        <p>The pinhole makes a spherical wave. Light that passes the sample undisturbed is the <b>reference</b>; light scattered by the sample is the <b>object wave</b>. They interfere on the camera, and that intensity pattern is the hologram. The shadow of the sample is magnified by <b>M = L / z₁</b>, which is why no lens is needed.</p>
+        <p>Numerically, a point-source hologram is equivalent to a plane-wave hologram of the sample recorded at the distance <b>z_eff = z₁(L − z₁)/L</b>, with camera pixels shrunk by M (the Fresnel scaling theorem). This bench uses that equivalence with band-limited angular-spectrum propagation.</p>
+        <p><b>Coherence:</b> a laser is spatially coherent, so a bigger pinhole does not blur the hologram. It changes the illumination: a narrower cone, less magnification, and for a large unfocused pinhole a near-field (Fresnel) pattern of the aperture itself. The reconstruction divides this known illumination out. A blur from the pinhole size would only appear with a partially coherent source such as an LED.</p>
+        <p><b>Why a uniform glass plate is invisible:</b> it only adds the same phase everywhere, and the camera records intensity. Inline holography sees <i>changes</i> in optical path, such as edges, etched features, cells and particles. A plate becomes visible only where its thickness or index changes.</p>
+      </section>
+    </main>
+  </div>
+</div>
+
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+// ---------------------------------------------------------------- FFT (radix-2; Bluestein chirp-z for other N), 2-D
+const fftCache={};
+function radix2(N){ // in-place 1-D FFT on (tr,ti) of length N (power of 2), unnormalised
+  const LOG=Math.round(Math.log2(N)), rev=new Uint32Array(N), cs=new Float64Array(N/2), sn=new Float64Array(N/2);
+  for(let i=0;i<N;i++){let r=0,x=i;for(let b=0;b<LOG;b++){r=(r<<1)|(x&1);x>>=1;}rev[i]=r;}
+  for(let i=0;i<N/2;i++){cs[i]=Math.cos(2*Math.PI*i/N);sn[i]=Math.sin(2*Math.PI*i/N);}
+  return function(tr,ti,inv){
+    for(let i=0;i<N;i++){const j=rev[i]; if(j>i){let t=tr[i];tr[i]=tr[j];tr[j]=t;t=ti[i];ti[i]=ti[j];ti[j]=t;}}
+    const sg=inv?1:-1;
+    for(let size=2;size<=N;size<<=1){const h=size>>1,step=N/size;
+      for(let s=0;s<N;s+=size)for(let k=0;k<h;k++){const c=cs[k*step],w=sg*sn[k*step],a=s+k,b=a+h;
+        const xr=tr[b]*c-ti[b]*w, xi=tr[b]*w+ti[b]*c; tr[b]=tr[a]-xr; ti[b]=ti[a]-xi; tr[a]+=xr; ti[a]+=xi;}}
+  };
+}
+function bluestein(N){ // arbitrary-length DFT via chirp-z convolution with a power-of-2 FFT of length M >= 2N-1
+  let M=1; while(M<2*N-1) M<<=1;
+  const core=radix2(M), wr=new Float64Array(N), wi=new Float64Array(N);
+  for(let n=0;n<N;n++){const m=(n*n)%(2*N), a=Math.PI*m/N; wr[n]=Math.cos(a); wi[n]=-Math.sin(a);} // w[n]=exp(-i*pi*n^2/N)
+  const Bf=[new Float64Array(M),new Float64Array(M)], Bi=[new Float64Array(M),new Float64Array(M)];
+  for(let n=0;n<N;n++){ // forward kernel conj(w); inverse kernel w
+    Bf[0][n]=wr[n]; Bf[1][n]=-wi[n]; Bi[0][n]=wr[n]; Bi[1][n]=wi[n];
+    if(n>0){Bf[0][M-n]=wr[n]; Bf[1][M-n]=-wi[n]; Bi[0][M-n]=wr[n]; Bi[1][M-n]=wi[n];}}
+  core(Bf[0],Bf[1],false); core(Bi[0],Bi[1],false);
+  const ar=new Float64Array(M), ai=new Float64Array(M);
+  return function(tr,ti,inv){
+    const s=inv?-1:1, B=inv?Bi:Bf; ar.fill(0); ai.fill(0);
+    for(let n=0;n<N;n++){const c=wr[n], d=s*wi[n]; ar[n]=tr[n]*c-ti[n]*d; ai[n]=tr[n]*d+ti[n]*c;}
+    core(ar,ai,false);
+    for(let k=0;k<M;k++){const x=ar[k],y=ai[k]; ar[k]=x*B[0][k]-y*B[1][k]; ai[k]=x*B[1][k]+y*B[0][k];}
+    core(ar,ai,true); const iM=1/M;
+    for(let k=0;k<N;k++){const c=wr[k], d=s*wi[k], x=ar[k]*iM, y=ai[k]*iM; tr[k]=x*c-y*d; ti[k]=x*d+y*c;}
+  };
+}
+function getFFT(N){
+  if(fftCache[N]) return fftCache[N];
+  const f1=(N&(N-1))===0?radix2(N):bluestein(N), tr=new Float64Array(N), ti=new Float64Array(N);
+  function fft2(re,im,inv){
+    for(let r=0;r<N;r++){const o=r*N; for(let i=0;i<N;i++){tr[i]=re[o+i];ti[i]=im[o+i];} f1(tr,ti,inv); for(let i=0;i<N;i++){re[o+i]=tr[i];im[o+i]=ti[i];}}
+    for(let c=0;c<N;c++){for(let j=0;j<N;j++){tr[j]=re[j*N+c];ti[j]=im[j*N+c];} f1(tr,ti,inv); for(let j=0;j<N;j++){re[j*N+c]=tr[j];im[j*N+c]=ti[j];}}
+    if(inv){const s=1/(N*N); for(let i=0;i<N*N;i++){re[i]*=s;im[i]*=s;}}
+  }
+  return fftCache[N]={fft2};
+}
+
+// ---------------------------------------------------------------- Bessel J1 (Numerical Recipes approximation)
+function J1(x){const ax=Math.abs(x); let y,a1,a2;
+  if(ax<8){y=x*x; a1=x*(72362614232.0+y*(-7895059235.0+y*(242396853.1+y*(-2972611.439+y*(15704.48260+y*(-30.16036606))))));
+    a2=144725228442.0+y*(2300535178.0+y*(18583304.74+y*(99447.43394+y*(376.9991397+y)))); return a1/a2;}
+  const z=8/ax; y=z*z; const xx=ax-2.356194491;
+  a1=1.0+y*(0.183105e-2+y*(-0.3516396496e-4+y*(0.2457520174e-5+y*(-0.240337019e-6))));
+  a2=0.04687499995+y*(-0.2002690873e-3+y*(0.8449199096e-5+y*(-0.88228987e-6+y*0.105787412e-6)));
+  const ans=Math.sqrt(0.636619772/ax)*(Math.cos(xx)*a1-z*Math.sin(xx)*a2); return x<0?-ans:ans;}
+const jinc=u=>Math.abs(u)<1e-8?1:2*J1(u)/u;
+
+// ---------------------------------------------------------------- band-limited angular spectrum
+const kerCache=new Map();
+function kernel(N,dx,z,lam){
+  const key=[N,dx.toFixed(6),z.toFixed(4),lam].join("|"); if(kerCache.has(key)) return kerCache.get(key);
+  const re=new Float64Array(N*N), im=new Float64Array(N*N), du=1/(N*dx);
+  const ulim=1/(lam*Math.sqrt((2*Math.abs(z)*du)**2+1)), inv2=1/(lam*lam);
+  for(let j=0;j<N;j++){const fy=(j<N/2?j:j-N)*du;
+    for(let i=0;i<N;i++){const fx=(i<N/2?i:i-N)*du, q=j*N+i;
+      if(Math.abs(fx)>ulim||Math.abs(fy)>ulim){continue;}
+      const a=inv2-fx*fx-fy*fy; if(a<=0) continue;
+      const ph=2*Math.PI*z*Math.sqrt(a); re[q]=Math.cos(ph); im[q]=Math.sin(ph);}}
+  if(kerCache.size>(N>1100?3:12)) kerCache.delete(kerCache.keys().next().value);
+  const k={re,im,ulim}; kerCache.set(key,k); return k;
+}
+function propagate(re,im,N,dx,z,lam){
+  const F=getFFT(N); F.fft2(re,im,false); const k=kernel(N,dx,z,lam);
+  for(let q=0;q<N*N;q++){const a=re[q],b=im[q]; re[q]=a*k.re[q]-b*k.im[q]; im[q]=a*k.im[q]+b*k.re[q];}
+  F.fft2(re,im,true); return k.ulim;
+}
+
+// ---------------------------------------------------------------- random
+function rng(seed){let a=seed>>>0;return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function gauss(r){let u=0,v=0;while(u===0)u=r();while(v===0)v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+
+// ---------------------------------------------------------------- samples
+const SAMPLES={
+  text:{p:[["h","Etch depth",0.02,1.5,0.01,0.3,"µm"],["n","Glass index",1.4,1.9,0.005,1.52,""],["H","Letter height",5,1500,1,20,"µm"]],
+    info:"Letters etched into the glass surface. Phase = 2π(n−1)·depth/λ. A pure phase object: almost no absorption."},
+  uniform:{p:[["t","Thickness",1,1000,1,170,"µm"],["n","Glass index",1.4,1.9,0.005,1.52,""]],
+    info:"A flat, uniform plate only adds a constant phase. The hologram does not change: there is nothing to see. Compare with the edge or etched plate."},
+  edge:{p:[["t","Step height",0.02,3,0.01,0.3,"µm"],["n","Index n",1.3,1.9,0.005,1.52,""],["x","Edge position",-0.4,0.4,0.01,0,"× FOV"]],
+    info:"Half of the field passes through a thin layer (film edge, or a very thin glass edge). Fresnel edge fringes appear in the hologram."},
+  beads:{p:[["D","Diameter",0.5,60,0.1,5,"µm"],["nb","Bead index",1.35,1.7,0.005,1.37,""],["nm","Medium index",1.0,1.55,0.005,1.33,""],["cnt","Count",1,40,1,12,""],["seed","Layout",1,50,1,7,""]],
+    info:"Default: low-contrast beads (Δn = 0.04, e.g. hydrogel beads in water). Silica (1.46) or polystyrene (1.59) in water wraps the phase above about 2 µm. Thin-object model: phase = 2π(n_b − n_m)·thickness/λ. Large, high-contrast beads also refract, which this model ignores. Keep the peak phase under π for the phase constraint."},
+  rbc:{p:[["D","Cell diameter",5,10,0.1,7.8,"µm"],["nc","Cell index",1.36,1.44,0.001,1.40,""],["nm","Plasma index",1.33,1.36,0.001,1.345,""],["cnt","Count",1,20,1,7,""],["seed","Layout",1,50,1,3,""]],
+    info:"Biconcave discs (approximate profile: about 0.8 µm thick in the centre, 2.6 µm at the rim). The dimple in the centre is visible in the reconstructed phase if the resolution is good enough."},
+  dust:{p:[["D","Diameter",0.5,60,0.1,3,"µm"],["cnt","Count",1,40,1,10,""],["seed","Layout",1,50,1,11,""]],
+    info:"Opaque discs. The hologram shows concentric fringes around each particle; use the absorbing-object constraint for the iterative step."},
+  pbars:{p:[["w","Smallest bar",0.2,60,0.01,0.44,"µm"],["ph","Phase delay",0.1,3.14,0.01,1.0,"rad"]],
+    info:"Transparent bars (a phase USAF-type chart), widths w, 2w and 4w. With 0.9 µm pixels, the native-pixel limit is about 0.9 µm per line; pixel super-resolution aims to go below that."},
+  bars:{p:[["w","Smallest bar",0.5,60,0.1,1.5,"µm"]],
+    info:"Chrome bars on glass, three bars per group, widths w, 2w and 4w, vertical and horizontal. Find the smallest group you can still resolve."},
+};
+const S={zoom:1,src:'laser',mfd:3.3,psr:false,K:2,psrMode:'psr',lens:true,pin:true,dirt:0.4,phot:true,P:0.05,texp:0.05,QE:0.6,FW:10000,rn:3,bits:12,NA:0.5,fl:4,sl:4,Db:2,lam:0.532,dp:1,z1:0.5,L:10,px:5.5,N:512,noise:1,bgdiv:true,stype:"text",sv:{},dz:0,cons:"phase",iters:60,row:0,truthAmp:false};
+const sv=k=>S.sv[S.stype+k];
+
+function buildSampleUI(){
+  const d=SAMPLES[S.stype], box=$("sparams"); box.innerHTML="";
+  for(const [key,lab,mn,mx,st,def,unit] of d.p){
+    if(S.sv[S.stype+key]===undefined) S.sv[S.stype+key]=def;
+    const row=document.createElement("div"); row.className="knob";
+    row.innerHTML=`<label for="s-${key}">${lab}</label><input id="s-${key}" type="range" min="${mn}" max="${mx}" step="${st}" value="${S.sv[S.stype+key]}"><span class="numwrap"><input class="num" type="number" step="any" aria-label="${lab} value"><span class="unit">${unit}</span></span>`;
+    box.appendChild(row);
+    const inp=row.querySelector("input[type=range]"), out=row.querySelector("input.num");
+    const dec=st<0.01?3:st<0.1?2:st<1?1:0;
+    const show=()=>{if(document.activeElement!==out) out.value=(+inp.value).toFixed(dec);};
+    show(); inp.addEventListener("input",()=>{S.sv[S.stype+key]=+inp.value; show(); schedule();});
+    const typed=()=>{let v=+out.value; if(!isFinite(v)) return; v=Math.max(mn,Math.min(mx,v)); inp.value=v; S.sv[S.stype+key]=v; out.value=v.toFixed(dec); schedule();};
+    out.addEventListener("change",typed); out.addEventListener("keydown",e=>{if(e.key==="Enter")typed();});
+  }
+  $("sinfo").textContent=d.info;
+  S.truthAmp=(S.stype==="dust"||S.stype==="bars");
+  $("tShow").textContent=S.truthAmp?"amplitude":"phase"; $("tShow").setAttribute("aria-pressed",S.truthAmp);
+  $("cons").value=S.truthAmp?"abs":"phase"; S.cons=$("cons").value;
+}
+
+// transmission t(x,y) on the object grid
+function makeSample(N,dx,lam){
+  const amp=new Float64Array(N*N).fill(1), ph=new Float64Array(N*N), k=2*Math.PI/lam, fov=N*dx;
+  const X=i=>(i-N/2)*dx;
+  const cnv=()=>{const c=document.createElement("canvas"); c.width=c.height=N; const g=c.getContext("2d"); g.fillStyle="#000"; g.fillRect(0,0,N,N); g.fillStyle="#fff"; return [c,g];};
+  const maskFrom=(g)=>{const d=g.getImageData(0,0,N,N).data, m=new Float64Array(N*N); for(let q=0;q<N*N;q++) m[q]=d[q*4]/255; return m;};
+  const place=(cnt,D,seed)=>{const r=rng(seed*7919+13), pts=[[0,0]]; let tries=0;
+    while(pts.length<cnt&&tries<4000){tries++; const x=(r()-.5)*fov*.8, y=(r()-.5)*fov*.8;
+      if(pts.every(p=>Math.hypot(p[0]-x,p[1]-y)>D*1.15)) pts.push([x,y]);} return pts;};
+  switch(S.stype){
+    case "text":{const [c,g]=cnv(); const hpx=sv("H")/dx; g.font=`700 ${hpx*1.35}px ${css("--display")}`; g.textAlign="center"; g.textBaseline="middle"; g.fillText("DHM",N/2,N/2+hpx*0.05);
+      const m=maskFrom(g), p0=k*(sv("n")-1)*sv("h"); for(let q=0;q<N*N;q++) ph[q]=p0*m[q]; break;}
+    case "uniform":{const p0=k*(sv("n")-1)*sv("t"); ph.fill(p0); break;}
+    case "edge":{const x0=sv("x")*fov, p0=k*(sv("n")-1)*sv("t"); for(let j=0;j<N;j++)for(let i=0;i<N;i++) if(X(i)>x0) ph[j*N+i]=p0; break;}
+    case "beads":{const R=sv("D")/2, dn=sv("nb")-sv("nm"); for(const [cx,cy] of place(sv("cnt"),sv("D"),sv("seed"))){
+        const i0=Math.floor((cx-R)/dx+N/2)-1,i1=Math.ceil((cx+R)/dx+N/2)+1,j0=Math.floor((cy-R)/dx+N/2)-1,j1=Math.ceil((cy+R)/dx+N/2)+1;
+        for(let j=Math.max(0,j0);j<Math.min(N,j1);j++)for(let i=Math.max(0,i0);i<Math.min(N,i1);i++){const r2=(X(i)-cx)**2+(X(j)-cy)**2; if(r2<R*R) ph[j*N+i]+=k*dn*2*Math.sqrt(R*R-r2);}}
+      break;}
+    case "rbc":{const D=sv("D"), R=D/2, s=D/7.82, dn=sv("nc")-sv("nm");
+      for(const [cx,cy] of place(sv("cnt"),D,sv("seed"))){
+        const i0=Math.floor((cx-R)/dx+N/2)-1,i1=Math.ceil((cx+R)/dx+N/2)+1,j0=Math.floor((cy-R)/dx+N/2)-1,j1=Math.ceil((cy+R)/dx+N/2)+1;
+        for(let j=Math.max(0,j0);j<Math.min(N,j1);j++)for(let i=Math.max(0,i0);i<Math.min(N,i1);i++){
+          const rr=Math.hypot(X(i)-cx,X(j)-cy)/R; if(rr>=1) continue; const u=rr*rr;
+          const h=s*Math.sqrt(1-u)*(0.81+7.83*u-4.39*u*u); // biconcave profile: ~0.8 µm centre, ~2.6 µm rim (total thickness)
+          ph[j*N+i]+=k*dn*h;}}
+      break;}
+    case "dust":{const R=sv("D")/2; for(const [cx,cy] of place(sv("cnt"),sv("D"),sv("seed"))){
+        for(let j=0;j<N;j++){const dy=X(j)-cy; if(Math.abs(dy)>R+dx) continue; for(let i=0;i<N;i++){const r=Math.hypot(X(i)-cx,dy); if(r<R) amp[j*N+i]=0; else if(r<R+dx) amp[j*N+i]=Math.min(amp[j*N+i],(r-R)/dx);}}}
+      break;}
+    case "pbars":
+    case "bars":{const [c,g]=cnv(); const w=sv("w")/dx; 
+      const groups=[1,2,4]; let xs=[]; let cur=0; for(const m of groups){xs.push(cur); cur+=6*m*w+4*w;} const total=cur-4*w, start=N/2-total/2;
+      groups.forEach((m,gi)=>{const bw=m*w, len=5*bw, x0=start+xs[gi];
+        for(let b=0;b<3;b++) g.fillRect(x0+b*2*bw, N/2-len-2*w, bw, len);           // vertical bars (above centre line)
+        for(let b=0;b<3;b++) g.fillRect(x0, N/2+2*w+b*2*bw, len, bw);               // horizontal bars (below)
+      });
+      const m=maskFrom(g); if(S.stype==="pbars"){const p0=sv("ph"); for(let q=0;q<N*N;q++) ph[q]=p0*m[q];} else for(let q=0;q<N*N;q++) amp[q]=1-m[q]; break;}
+  }
+  return {amp,ph};
+}
+
+// ---------------------------------------------------------------- illumination at the sample
+// Returns A(x,y): the complex illumination at the sample plane with the ideal spherical factor
+// exp(iπr²/λz1) (wave diverging from the pinhole centre) removed. With this definition the
+// Fresnel scaling theorem is exact: the sample field A·t propagates like a plane-wave hologram
+// over z_eff with pixels p/M.
+// laser beam: Gaussian, 1/e² diameter S.Db (mm)
+function beamModel(lam){
+  const w=S.Db*500, d=S.dp;                                   // 1/e² radius and pinhole diameter (µm)
+  if(S.src==="fiber"){const w0=S.mfd/2, NAw=lam/(Math.PI*w0); return {w,d,NAw,over:false,spot:2*w0,w0,zR:Math.PI*w0*w0/lam,del:0,wD:w0,RD:Infinity,light:1,fiber:true};}
+  if(S.lens){
+    const f=S.fl*1000, NAg=w/f, over=NAg>=S.NA;               // working NA from the beam; lens aperture clips it if overfilled
+    const NAw=over?S.NA:NAg, spot=over?1.22*lam/S.NA:2*lam/(Math.PI*NAg);
+    const clip=over?1-Math.exp(-2*(S.NA*f/w)**2):1;           // fraction of the beam passing the lens aperture
+    // Gaussian beam around the focus: waist w0, Rayleigh range zR; the pinhole sits del = s − f from the focus
+    const w0=lam/(Math.PI*NAw), zR=Math.PI*w0*w0/lam, del=(S.sl-S.fl)*1000;
+    const wD=w0*Math.sqrt(1+(del/zR)**2), RD=del===0?Infinity:del*(1+(zR/del)**2);
+    const through=(del===0&&over)?Math.min(1,(d/spot)**2):1-Math.exp(-d*d/(2*wD*wD));
+    return {w,d,NAw,over,spot,w0,zR,del,wD,RD,light:clip*(S.pin?through:1)};
+  }
+  return {w,d,light:S.pin?1-Math.exp(-2*(d/2)**2/(w*w)):1};
+}
+function J0(x){const ax=Math.abs(x); let y,a1,a2;
+  if(ax<8){y=x*x; a1=57568490574.0+y*(-13362590354.0+y*(651619640.7+y*(-11214424.18+y*(77392.33017+y*(-184.9052456)))));
+    a2=57568490411.0+y*(1029532985.0+y*(9494680.718+y*(59272.64853+y*(267.8532712+y)))); return a1/a2;}
+  const z=8/ax; y=z*z; const xx=ax-0.785398164;
+  a1=1.0+y*(-0.1098628627e-2+y*(0.2734510407e-4+y*(-0.2073370639e-5+y*0.2093887211e-6)));
+  a2=-0.1562499995e-1+y*(0.1430488765e-3+y*(-0.6911147651e-5+y*(0.7621095161e-6-y*0.934935152e-7)));
+  return Math.sqrt(0.636619772/ax)*(Math.cos(xx)*a1-z*Math.sin(xx)*a2);}
+// Illumination at the sample, exact (paraxial Fresnel) for a round pinhole lit by a centred Gaussian beam:
+// A(ρ) = ∫₀^{d/2} g(r)·exp(iπr²(1/z₁+1/R)/λ)·J₀(2πρr)·r dr,  ρ = sinθ/λ.
+// g = Gaussian of the beam in the pinhole plane, R = its wavefront radius there (lens defocus), R = ∞ without lens.
+function illumination(N,dx,z1um,lam){
+  const re=new Float64Array(N*N), im=new Float64Array(N*N), d=S.dp, B=beamModel(lam);
+  if(!S.pin || S.src==="fiber") return illumNoPinhole(N,dx,z1um,lam,B);
+  const wg=S.lens?B.wD:B.w, Rc=S.lens?B.RD:Infinity, aR=Math.min(d/2,4*wg);
+  const q=1/z1um+(isFinite(Rc)?1/Rc:0);
+  let rmax=0; for(const [i,j] of [[0,0],[N-1,0],[0,N-1],[N-1,N-1]]) rmax=Math.max(rmax,Math.hypot((i-N/2)*dx,(j-N/2)*dx));
+  const rhoMax=(rmax/Math.hypot(rmax,z1um))/lam*1.01, NT=1536;
+  const phMax=Math.PI*aR*aR*Math.abs(q)/lam, Nr=Math.min(24000,Math.max(300,Math.ceil((phMax+2*Math.PI*rhoMax*aR)/0.15)));
+  const dr=aR/Nr, gr=new Float64Array(Nr), gi=new Float64Array(Nr), rr=new Float64Array(Nr);
+  for(let k=0;k<Nr;k++){const r=(k+0.5)*dr, g=Math.exp(-r*r/(wg*wg))*r*dr, p=Math.PI*r*r*q/lam; rr[k]=r; gr[k]=g*Math.cos(p); gi[k]=g*Math.sin(p);}
+  const Tr=new Float64Array(NT+1), Ti=new Float64Array(NT+1);
+  for(let t=0;t<=NT;t++){const rho=rhoMax*t/NT, w=2*Math.PI*rho; let sr=0,si=0; for(let k=0;k<Nr;k++){const j0=J0(w*rr[k]); sr+=gr[k]*j0; si+=gi[k]*j0;} Tr[t]=sr; Ti[t]=si;}
+  for(let j=0;j<N;j++)for(let i=0;i<N;i++){const r=Math.hypot((i-N/2)*dx,(j-N/2)*dx), rho=(r/Math.hypot(r,z1um))/lam, x=rho/rhoMax*NT, t0=Math.min(NT-1,Math.floor(x)), f=x-t0, qq=j*N+i;
+    re[qq]=Tr[t0]*(1-f)+Tr[t0+1]*f; im[qq]=Ti[t0]*(1-f)+Ti[t0+1]*f;}
+  // description for the readouts
+  const ratio=d/(2*wg), del=S.lens?B.del:0, NF=Math.min(d,2*wg)**2/(4*lam*z1um);
+  const curvPh=isFinite(Rc)?Math.PI*aR*aR/(lam*Math.abs(Rc)):0;   // wavefront curvature across the pinhole (rad)
+  const mode= (ratio<0.5 && curvPh<1 && NF<0.3) ? "airy" : ratio>2 ? (S.lens?"focus":"gauss") : "clipped";
+  const zs= (S.lens && mode!=="airy") ? z1um+del : z1um;
+  const aEff=Math.min(d,2*wg), spot=B.spot||0, dxi=0;
+  // fraction of the power leaving the pinhole that lands on the sensor (Parseval, paraxial)
+  let Eg=0; for(let k=0;k<Nr;k++){const r=rr[k]; Eg+=Math.exp(-2*r*r/(wg*wg))*2*Math.PI*r*dr;}
+  let Es=0; for(let qq=0;qq<N*N;qq++) Es+=re[qq]*re[qq]+im[qq]*im[qq];
+  const frac=Math.min(1,Es*(2*Math.PI/(lam*z1um))**2*dx*dx/Math.max(Eg,1e-30));
+  // normalise: rms 1 over the lit area
+  let mx=0; for(let q=0;q<N*N;q++){const a=re[q]*re[q]+im[q]*im[q]; if(a>mx) mx=a;}
+  let s=0,c=0; for(let q=0;q<N*N;q++){const a=re[q]*re[q]+im[q]*im[q]; if(a>0.04*mx){s+=a;c++;}}
+  const k=1/Math.sqrt(s/Math.max(c,1)); for(let q=0;q<N*N;q++){re[q]*=k; im[q]*=k;}
+  return {re,im,mode,NF,spot,dxi,B,aEff,zs,ratio,frac};
+}
+// no pinhole: with the lens the focus is the source (unclipped Gaussian cone); without the lens a collimated Gaussian beam (plane-wave Gabor holography)
+function illumNoPinhole(N,dx,z1um,lam,B){
+  const re=new Float64Array(N*N), im=new Float64Array(N*N); let mode, zs, frac=0, aEff;
+  if(S.lens || B.fiber){
+    mode="focus"; zs=z1um+B.del; aEff=2*B.w0;
+    const dc=Math.PI/lam*(1/zs-1/z1um); let sg=0;
+    for(let j=0;j<N;j++)for(let i=0;i<N;i++){const r=Math.hypot((i-N/2)*dx,(j-N/2)*dx), s2=r/Math.hypot(r,Math.abs(zs)), q=j*N+i; const u=s2/B.NAw, a=Math.exp(-u*u);
+      const ph=dc*r*r; re[q]=a*Math.cos(ph); im[q]=a*Math.sin(ph); sg+=a*a*(dx/Math.abs(zs))**2;}
+    frac=Math.min(1,sg/(Math.PI*B.NAw*B.NAw/2));
+  } else {
+    mode="plane"; zs=Infinity; aEff=2*B.w; let sg=0;           // grid is already the plane-wave geometry (M = 1)
+    for(let j=0;j<N;j++)for(let i=0;i<N;i++){const r2=((i-N/2)*dx)**2+((j-N/2)*dx)**2, a=Math.exp(-r2/(B.w*B.w)), q=j*N+i; re[q]=a; sg+=a*a*dx*dx;}
+    frac=Math.min(1,sg/(Math.PI*B.w*B.w/2));
+  }
+  let mx=0; for(let q=0;q<N*N;q++){const a=re[q]*re[q]+im[q]*im[q]; if(a>mx) mx=a;}
+  let s=0,c=0; for(let q=0;q<N*N;q++){const a=re[q]*re[q]+im[q]*im[q]; if(a>0.04*mx){s+=a;c++;}}
+  const k=1/Math.sqrt(s/Math.max(c,1)); for(let q=0;q<N*N;q++){re[q]*=k; im[q]*=k;}
+  return {re,im,mode,NF:0,spot:B.spot||0,dxi:0,B,aEff,zs,ratio:Infinity,frac};
+}
+// dirt and imperfections on the optics before the pinhole (dust shadows + a faint etalon fringe).
+// The illumination is a scaled image of the lens pupil; a pinhole in the focus low-passes it with cut-off d/(2λ·z_s).
+async function applyDirt(ill,N,dx,lam){
+  if(S.dirt<=0 || S.src==="fiber" || (!S.lens && S.pin)) return ill;   // without lens, a pinhole passes only a tiny patch of the beam
+  const r=rng(777), D=new Float64Array(N*N).fill(1), mf=S.lens?Math.abs(ill.zs)/(S.fl*1000):1, wb=S.Db*500;
+  const n=Math.round(80*S.dirt);
+  for(let k=0;k<n;k++){const rad=(10+140*r()*r())*mf, ang=2*Math.PI*r(), pr=1.3*wb*Math.sqrt(r())*mf, cx=pr*Math.cos(ang), cy=pr*Math.sin(ang), op=0.25+0.6*r();
+    const i0=Math.max(0,Math.floor((cx-rad)/dx+N/2)), i1=Math.min(N,Math.ceil((cx+rad)/dx+N/2)), j0=Math.max(0,Math.floor((cy-rad)/dx+N/2)), j1=Math.min(N,Math.ceil((cy+rad)/dx+N/2));
+    for(let j=j0;j<j1;j++)for(let i=i0;i<i1;i++){const rr=Math.hypot((i-N/2)*dx-cx,(j-N/2)*dx-cy); if(rr<rad) D[j*N+i]*=1-op*Math.min(1,(rad-rr)/(0.15*rad+dx));}}
+  const kx=(0.3+r())*0.02/Math.max(mf,1e-3), ky=(r()-0.5)*0.02/Math.max(mf,1e-3), fr=0.12*S.dirt;
+  const Dr=new Float64Array(N*N), Di=new Float64Array(N*N);
+  for(let j=0;j<N;j++)for(let i=0;i<N;i++){const q=j*N+i; Dr[q]=Math.sqrt(D[q])*(1+fr*Math.cos(2*Math.PI*(kx*(i-N/2)*dx+ky*(j-N/2)*dx)));}
+  if(S.pin && S.lens){ // spatial filter: keep frequencies below d/(2λ z_s)
+    const du=1/(N*dx), fc=S.dp/(2*lam*Math.abs(ill.zs));
+    if(ENGINE==="gpu") await gpuLowpass(Dr,Di,N,dx,fc);
+    else { const F=getFFT(N); F.fft2(Dr,Di,false);
+      for(let j=0;j<N;j++){const fy=(j<N/2?j:j-N)*du; for(let i=0;i<N;i++){const fx=(i<N/2?i:i-N)*du; if(fx*fx+fy*fy>fc*fc){Dr[j*N+i]=0;Di[j*N+i]=0;}}}
+      F.fft2(Dr,Di,true); }
+  }
+  const re=new Float64Array(N*N), im=new Float64Array(N*N);
+  for(let q=0;q<N*N;q++){re[q]=ill.re[q]*Dr[q]-ill.im[q]*Di[q]; im[q]=ill.re[q]*Di[q]+ill.im[q]*Dr[q];}
+  return Object.assign({},ill,{re,im});
+}
+
+// ================================================================ WebGPU engine
+// All heavy FFT work (2-D FFTs, band-limited angular-spectrum propagation, the iterative twin-image loop)
+// runs in WGSL compute shaders in 32-bit floats. Power-of-2 lengths use a radix-2 Stockham FFT;
+// other lengths (1064, 2128, …) use Bluestein's chirp-z method on top of it. Twiddles, chirps and the
+// Bluestein kernels are computed on the CPU in 64-bit and uploaded, so no large angles are evaluated in f32.
+const GPU={ok:false,dev:null,adapter:null,info:null,pipes:{},N:0,bufs:null,bgCache:new Map(),uCache:new Map(),tabs:new Map(),bid:0,software:false};
+const WG=64;
+const HDR=`struct P{a:u32,b:u32,c:u32,d:u32,x:f32,y:f32,z:f32,w:f32,e:f32,f:f32,g:f32,h:f32};
+@group(0) @binding(0) var<uniform> p:P;
+fn cm(a:vec2f,b:vec2f)->vec2f{return vec2f(a.x*b.x-a.y*b.y,a.x*b.y+a.y*b.x);}
+const TAU:f32=6.283185307179586;
+fn wrap(x:f32)->f32{return x-TAU*floor(x/TAU);}
+`;
+const SH={
+stage:`@group(0) @binding(1) var<storage,read> s:array<vec2f>; @group(0) @binding(2) var<storage,read_write> d:array<vec2f>; @group(0) @binding(3) var<storage,read> tw:array<vec2f>;
+@compute @workgroup_size(${WG}) fn main(@builtin(global_invocation_id) g:vec3u){
+  let M=p.a; let Ns=p.b; let h=M/2u; let j=g.x; let row=g.y; if(j>=h||row>=p.c){return;}
+  let base=row*M; let v0=s[base+j]; let k=j%Ns; let t=tw[k*(h/Ns)];
+  let v1=cm(s[base+j+h],vec2f(t.x,p.x*t.y));
+  let idx=(j/Ns)*Ns*2u+k; d[base+idx]=v0+v1; d[base+idx+Ns]=v0-v1;}`,
+transpose:`@group(0) @binding(1) var<storage,read> s:array<vec2f>; @group(0) @binding(2) var<storage,read_write> d:array<vec2f>;
+@compute @workgroup_size(16,16) fn main(@builtin(global_invocation_id) g:vec3u){
+  let N=p.a; if(g.x>=N||g.y>=N){return;} d[g.x*N+g.y]=s[g.y*N+g.x];}`,
+bsPre:`@group(0) @binding(1) var<storage,read> s:array<vec2f>; @group(0) @binding(2) var<storage,read_write> d:array<vec2f>; @group(0) @binding(3) var<storage,read> ch:array<vec2f>;
+@compute @workgroup_size(${WG}) fn main(@builtin(global_invocation_id) g:vec3u){
+  let N=p.a; let M=p.b; let n=g.x; let row=g.y; if(n>=M||row>=p.c){return;}
+  if(n<N){let c=ch[n]; d[row*M+n]=cm(s[row*N+n],vec2f(c.x,p.x*c.y));} else {d[row*M+n]=vec2f(0.0,0.0);}}`,
+cmulB:`@group(0) @binding(1) var<storage,read_write> d:array<vec2f>; @group(0) @binding(2) var<storage,read> B:array<vec2f>;
+@compute @workgroup_size(${WG}) fn main(@builtin(global_invocation_id) g:vec3u){
+  let M=p.a; let k=g.x; let row=g.y; if(k>=M||row>=p.b){return;} let q=row*M+k; d[q]=cm(d[q],B[k]);}`,
+bsPost:`@group(0) @binding(1) var<storage,read> s:array<vec2f>; @group(0) @binding(2) var<storage,read_write> d:array<vec2f>; @group(0) @binding(3) var<storage,read> ch:array<vec2f>;
+@compute @workgroup_size(${WG}) fn main(@builtin(global_invocation_id) g:vec3u){
+  let N=p.a; let M=p.b; let k=g.x; let row=g.y; if(k>=N||row>=p.c){return;}
+  let c=ch[k]; d[row*N+k]=cm(s[row*M+k]*p.y,vec2f(c.x,p.x*c.y));}`,
+scale:`@group(0) @binding(1) var<storage,read_write> d:array<vec2f>;
+@compute @workgroup_size(${WG}) fn main(@builtin(global_invocation_id) g:vec3u){ let i=g.x+g.y*65535u*${WG}u; if(i>=p.a){return;} d[i]=d[i]*p.x;}`,
+asm:`@group(0) @binding(1) var<storage,read_write> d:array<vec2f>;
+@compute @workgroup_size(16,16) fn main(@builtin(global_invocation_id) g:vec3u){
+  let N=p.a; let i=g.x; let j=g.y; if(i>=N||j>=N){return;} let q=j*N+i;
+  let fi=select(f32(i)-f32(N),f32(i),i<N/2u); let fj=select(f32(j)-f32(N),f32(j),j<N/2u);
+  let fx=fi*p.x; let fy=fj*p.x; let lam=p.z; let z=p.w;
+  if(abs(fx)>p.y||abs(fy)>p.y){d[q]=vec2f(0.0,0.0);return;}
+  let u=lam*lam*(fx*fx+fy*fy); if(u>=1.0){d[q]=vec2f(0.0,0.0);return;}
+  let dphi=-TAU*z*lam*(fx*fx+fy*fy)/(1.0+sqrt(1.0-u));   // 2πz√(1/λ²−f²) minus the constant 2πz/λ (added back exactly as p.e)
+  let ph=wrap(wrap(dphi)+p.e);
+  d[q]=cm(d[q],vec2f(cos(ph),sin(ph)))*p.f;}`,
+lowpass:`@group(0) @binding(1) var<storage,read_write> d:array<vec2f>;
+@compute @workgroup_size(16,16) fn main(@builtin(global_invocation_id) g:vec3u){
+  let N=p.a; let i=g.x; let j=g.y; if(i>=N||j>=N){return;}
+  let fi=select(f32(i)-f32(N),f32(i),i<N/2u)*p.x; let fj=select(f32(j)-f32(N),f32(j),j<N/2u)*p.x;
+  if(fi*fi+fj*fj>p.y*p.y){d[j*N+i]=vec2f(0.0,0.0);}}`,
+divIll:`@group(0) @binding(1) var<storage,read_write> d:array<vec2f>; @group(0) @binding(2) var<storage,read> A:array<vec2f>;
+@compute @workgroup_size(${WG}) fn main(@builtin(global_invocation_id) g:vec3u){ let i=g.x+g.y*65535u*${WG}u; if(i>=p.a){return;}
+  let a=A[i]; let den=dot(a,a)+p.x; d[i]=cm(d[i],vec2f(a.x,-a.y))/den;}`,
+mulIll:`@group(0) @binding(1) var<storage,read_write> d:array<vec2f>; @group(0) @binding(2) var<storage,read> A:array<vec2f>;
+@compute @workgroup_size(${WG}) fn main(@builtin(global_invocation_id) g:vec3u){ let i=g.x+g.y*65535u*${WG}u; if(i>=p.a){return;} d[i]=cm(d[i],A[i]);}`,
+consAbs:`@group(0) @binding(1) var<storage,read_write> d:array<vec2f>;
+@compute @workgroup_size(${WG}) fn main(@builtin(global_invocation_id) g:vec3u){ let i=g.x+g.y*65535u*${WG}u; if(i>=p.a){return;}
+  let a=length(d[i]); if(a>1.0){d[i]=d[i]/a;}}`,
+consPhase:`@group(0) @binding(1) var<storage,read_write> d:array<vec2f>;
+@compute @workgroup_size(${WG}) fn main(@builtin(global_invocation_id) g:vec3u){ let i=g.x+g.y*65535u*${WG}u; if(i>=p.a){return;}
+  var ph=atan2(d[i].y,d[i].x)-p.x; if(ph>3.14159265){ph=ph-TAU;} if(ph< -3.14159265){ph=ph+TAU;} ph=max(0.0,ph); d[i]=vec2f(cos(ph),sin(ph));}`,
+gather:`@group(0) @binding(1) var<storage,read> d:array<vec2f>; @group(0) @binding(2) var<storage,read> idx:array<u32>; @group(0) @binding(3) var<storage,read_write> o:array<f32>;
+@compute @workgroup_size(${WG}) fn main(@builtin(global_invocation_id) g:vec3u){ let i=g.x; if(i>=p.a){return;} let v=d[idx[i]]; o[i]=atan2(v.y,v.x);}`,
+ampRepl:`@group(0) @binding(1) var<storage,read_write> d:array<vec2f>; @group(0) @binding(2) var<storage,read> amp:array<f32>;
+@compute @workgroup_size(${WG}) fn main(@builtin(global_invocation_id) g:vec3u){ let i=g.x+g.y*65535u*${WG}u; if(i>=p.a){return;}
+  let ph=atan2(d[i].y,d[i].x); d[i]=amp[i]*vec2f(cos(ph),sin(ph));}`,
+};
+
+async function gpuInit(){
+  if(!("gpu" in navigator)) throw new Error("This browser does not expose WebGPU (navigator.gpu is missing).");
+  let ad=await navigator.gpu.requestAdapter({powerPreference:"high-performance"});
+  if(!ad) throw new Error("No GPU adapter available (WebGPU is present but the browser returned no adapter; it may be disabled or blocklisted for this GPU/driver).");
+  const L=ad.limits, want={maxStorageBufferBindingSize:Math.min(L.maxStorageBufferBindingSize,1<<30),maxBufferSize:Math.min(L.maxBufferSize,1<<30)};
+  const dev=await ad.requestDevice({requiredLimits:want});
+  let info=ad.info||{}; if(!ad.info && ad.requestAdapterInfo){try{info=await ad.requestAdapterInfo();}catch(e){}}
+  GPU.adapter=ad; GPU.dev=dev; GPU.info=info; GPU.limits=dev.limits;
+  GPU.software=!!(ad.isFallbackAdapter||(info&&info.isFallbackAdapter)||/swiftshader|llvmpipe|software|basic render/i.test(`${info.vendor} ${info.architecture} ${info.description} ${info.device}`));
+  GPU.pipes={}; GPU.N=0; GPU.bufs=null; GPU.bgCache.clear(); GPU.uCache.clear(); GPU.tabs.clear();
+  dev.pushErrorScope("validation");
+  for(const k in SH){const mod=dev.createShaderModule({code:HDR+SH[k]}); GPU.pipes[k]=dev.createComputePipeline({layout:"auto",compute:{module:mod,entryPoint:"main"}});}
+  const err=await dev.popErrorScope(); if(err) throw new Error("Shader compilation failed: "+err.message);
+  dev.lost.then(i=>{ if(GPU.dev!==dev) return; GPU.ok=false; onGpuLost&&onGpuLost(i); });
+  GPU.ok=true; return GPU;
+}
+let onGpuLost=null;
+function gbuf(bytes,usage){const b=GPU.dev.createBuffer({size:Math.max(16,Math.ceil(bytes/4)*4),usage:usage??(GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST)}); b._id=++GPU.bid; return b;}
+function uni(a,b,c,d,x=0,y=0,z=0,w=0,e=0,f=0){
+  const key=[a,b,c,d,x,y,z,w,e,f].join(","); let u=GPU.uCache.get(key); if(u) return u;
+  const ab=new ArrayBuffer(48), U=new Uint32Array(ab), F=new Float32Array(ab); U[0]=a;U[1]=b;U[2]=c;U[3]=d;F[4]=x;F[5]=y;F[6]=z;F[7]=w;F[8]=e;F[9]=f;
+  u=GPU.dev.createBuffer({size:48,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST}); GPU.dev.queue.writeBuffer(u,0,ab);
+  if(GPU.uCache.size>4000){GPU.uCache.clear(); GPU.bgCache.clear();} GPU.uCache.set(key,u); u._id=++GPU.bid; return u;
+}
+function run(enc,name,u,bufs,gx,gy=1){
+  const key=name+"|"+u._id+"|"+bufs.map(b=>b._id).join(","); let bg=GPU.bgCache.get(key);
+  if(!bg){const pl=GPU.pipes[name]; bg=GPU.dev.createBindGroup({layout:pl.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:u}},...bufs.map((b,i)=>({binding:i+1,resource:{buffer:b}}))]}); GPU.bgCache.set(key,bg);}
+  const ps=enc.beginComputePass(); ps.setPipeline(GPU.pipes[name]); ps.setBindGroup(0,bg); ps.dispatchWorkgroups(gx,gy); ps.end();
+}
+const lin=n=>{const w=Math.ceil(n/WG); return w<=65535?[w,1]:[65535,Math.ceil(w/65535)];};
+function twiddles(M){ const k="tw"+M; if(GPU.tabs.has(k)) return GPU.tabs.get(k);
+  const t=new Float32Array(M); for(let i=0;i<M/2;i++){t[2*i]=Math.cos(2*Math.PI*i/M); t[2*i+1]=Math.sin(2*Math.PI*i/M);}
+  const b=gbuf(t.byteLength); GPU.dev.queue.writeBuffer(b,0,t); GPU.tabs.set(k,b); return b;}
+function bsTables(N){ const k="bs"+N; if(GPU.tabs.has(k)) return GPU.tabs.get(k);
+  let M=1; while(M<2*N-1) M<<=1; const core=radix2(M);
+  const ch=new Float32Array(2*N), wr=new Float64Array(N), wi=new Float64Array(N);
+  for(let n=0;n<N;n++){const a=Math.PI*((n*n)%(2*N))/N; wr[n]=Math.cos(a); wi[n]=-Math.sin(a); ch[2*n]=wr[n]; ch[2*n+1]=wi[n];}
+  const mk=conj=>{const r=new Float64Array(M), i=new Float64Array(M); for(let n=0;n<N;n++){const s=conj?-wi[n]:wi[n]; r[n]=wr[n]; i[n]=s; if(n>0){r[M-n]=wr[n]; i[M-n]=s;}} core(r,i,false);
+    const f=new Float32Array(2*M); for(let q=0;q<M;q++){f[2*q]=r[q]; f[2*q+1]=i[q];} const b=gbuf(f.byteLength); GPU.dev.queue.writeBuffer(b,0,f); return b;};
+  const cb=gbuf(ch.byteLength); GPU.dev.queue.writeBuffer(cb,0,ch);
+  const o={M,ch:cb,Bf:mk(true),Bi:mk(false)}; GPU.tabs.set(k,o); return o;}
+async function ensureN(N){
+  if(GPU.N===N && GPU.bufs) return GPU.bufs;
+  if(GPU.bufs) for(const k in GPU.bufs) if(GPU.bufs[k] && GPU.bufs[k].destroy) GPU.bufs[k].destroy();
+  GPU.bufs=null; GPU.bgCache.clear(); GPU.N=0;
+  const pow2=(N&(N-1))===0; let M=N; if(!pow2){M=1; while(M<2*N-1) M<<=1;}
+  const need=N*M*8; if(need>GPU.limits.maxStorageBufferBindingSize||need>GPU.limits.maxBufferSize) throw new Error(`grid ${N} needs ${(need/1048576).toFixed(0)} MB buffers; this GPU allows ${(GPU.limits.maxStorageBufferBindingSize/1048576).toFixed(0)} MB`);
+  GPU.dev.pushErrorScope("out-of-memory"); GPU.dev.pushErrorScope("validation");
+  const c=N*N*8, B={X:gbuf(c),T:gbuf(c),F:gbuf(c),A:gbuf(c),amp:gbuf(N*N*4),W1:pow2?null:gbuf(N*M*8),W2:pow2?null:gbuf(N*M*8),
+    idx:gbuf(4096*4),gout:gbuf(4096*4),rd:gbuf(c,GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST),rdS:gbuf(4096*4,GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST)};
+  twiddles(pow2?N:M); if(!pow2) bsTables(N);
+  const e1=await GPU.dev.popErrorScope(), e2=await GPU.dev.popErrorScope();
+  if(e1||e2){ for(const k in B) B[k]&&B[k].destroy(); throw new Error(`could not allocate GPU memory for a ${N}×${N} grid (${((4*c+N*N*4+(pow2?0:2*N*M*8))/1048576).toFixed(0)} MB)`);}
+  GPU.bufs=B; GPU.N=N; return B;
+}
+// FFT along each row of `buf` (N rows of length N), in place; uses T (and W1/W2 for Bluestein) as scratch.
+function rowFFT(enc,N,buf,tmp,inv){
+  const B=GPU.bufs, sgn=inv?1:-1;
+  if((N&(N-1))===0){ const tw=twiddles(N); let s=buf,d=tmp;
+    for(let Ns=1;Ns<N;Ns<<=1){ run(enc,"stage",uni(N,Ns,N,0,sgn),[s,d,tw],Math.ceil(N/2/WG),N); [s,d]=[d,s]; }
+    if(s!==buf) enc.copyBufferToBuffer(s,0,buf,0,N*N*8); return; }
+  const t=bsTables(N), M=t.M, tw=twiddles(M), cs=inv?-1:1;
+  run(enc,"bsPre",uni(N,M,N,0,cs),[buf,B.W1,t.ch],Math.ceil(M/WG),N);
+  let s=B.W1,d=B.W2; for(let Ns=1;Ns<M;Ns<<=1){ run(enc,"stage",uni(M,Ns,N,0,-1),[s,d,tw],Math.ceil(M/2/WG),N); [s,d]=[d,s]; }
+  run(enc,"cmulB",uni(M,N,0,0),[s,inv?t.Bi:t.Bf],Math.ceil(M/WG),N);
+  const o=s===B.W1?B.W2:B.W1; let s2=s,d2=o; for(let Ns=1;Ns<M;Ns<<=1){ run(enc,"stage",uni(M,Ns,N,0,1),[s2,d2,tw],Math.ceil(M/2/WG),N); [s2,d2]=[d2,s2]; }
+  run(enc,"bsPost",uni(N,M,N,0,cs,1/M),[s2,buf,t.ch],Math.ceil(N/WG),N);
+}
+// unnormalised 2-D FFT of `buf` in place (inverse without the 1/N² factor)
+function fft2GPU(enc,N,buf,inv){ const T=GPU.bufs.T, g=Math.ceil(N/16);
+  rowFFT(enc,N,buf,T,inv); run(enc,"transpose",uni(N,0,0,0),[buf,T],g,g);
+  rowFFT(enc,N,T,buf,inv); run(enc,"transpose",uni(N,0,0,0),[T,buf],g,g); }
+function asmUni(N,dx,z,lam,scale){ const du=1/(N*dx), ulim=1/(lam*Math.sqrt((2*Math.abs(z)*du)**2+1));
+  const fr=z/lam-Math.floor(z/lam); return {u:uni(N,0,0,0,du,ulim,lam,z,2*Math.PI*fr,scale),ulim}; }
+function propEnc(enc,N,buf,dx,z,lam){ const {u,ulim}=asmUni(N,dx,z,lam,1/(N*N)); const g=Math.ceil(N/16);
+  fft2GPU(enc,N,buf,false); run(enc,"asm",u,[buf],g,g); fft2GPU(enc,N,buf,true); return ulim; }
+function upload(buf,re,im){ const n=re.length, f=new Float32Array(2*n); for(let q=0;q<n;q++){f[2*q]=re[q]; f[2*q+1]=im?im[q]:0;} GPU.dev.queue.writeBuffer(buf,0,f); }
+async function download(enc,buf,re,im){ const B=GPU.bufs, n=re.length; enc.copyBufferToBuffer(buf,0,B.rd,0,n*8); GPU.dev.queue.submit([enc.finish()]);
+  await B.rd.mapAsync(GPUMapMode.READ,0,n*8); const f=new Float32Array(B.rd.getMappedRange(0,n*8)); for(let q=0;q<n;q++){re[q]=f[2*q]; im[q]=f[2*q+1];} B.rd.unmap(); }
+// serialise all GPU work (the scratch buffers are shared)
+let gpuChain=Promise.resolve();
+function withGPU(fn){ const r=gpuChain.then(fn); gpuChain=r.catch(()=>{}); return r; }
+const gpuPropagate=(re,im,N,dx,z,lam)=>withGPU(async()=>{ await ensureN(N); const B=GPU.bufs; upload(B.X,re,im);
+  const enc=GPU.dev.createCommandEncoder(); const ulim=propEnc(enc,N,B.X,dx,z,lam); await download(enc,B.X,re,im); return ulim; });
+const gpuFFT2=(re,im,N,inv)=>withGPU(async()=>{ await ensureN(N); const B=GPU.bufs; upload(B.X,re,im); const enc=GPU.dev.createCommandEncoder();
+  fft2GPU(enc,N,B.X,inv); if(inv){const [a,b]=lin(N*N); run(enc,"scale",uni(N*N,0,0,0,1/(N*N)),[B.X],a,b);} await download(enc,B.X,re,im); });
+const gpuLowpass=(re,im,N,dx,fc)=>withGPU(async()=>{ await ensureN(N); const B=GPU.bufs; upload(B.X,re,im); const enc=GPU.dev.createCommandEncoder(), g=Math.ceil(N/16);
+  fft2GPU(enc,N,B.X,false); run(enc,"lowpass",uni(N,0,0,0,1/(N*dx),fc),[B.X],g,g); fft2GPU(enc,N,B.X,true);
+  const [a,b]=lin(N*N); run(enc,"scale",uni(N*N,0,0,0,1/(N*N)),[B.X],a,b); await download(enc,B.X,re,im); });
+
+// ---------------------------------------------------------------- start-up self-test
+function cpuRef(N,re,im,inv){ const F=getFFT(N); F.fft2(re,im,inv); }
+function relErr(ar,ai,br,bi){ let e=0,m=0; for(let q=0;q<ar.length;q++){e=Math.max(e,Math.hypot(ar[q]-br[q],ai[q]-bi[q])); m=Math.max(m,Math.hypot(br[q],bi[q]));} return e/Math.max(m,1e-30); }
+function randField(N,seed){ const r=rng(seed), re=new Float64Array(N*N), im=new Float64Array(N*N); for(let q=0;q<N*N;q++){re[q]=r()-0.5; im[q]=r()-0.5;} return [re,im]; }
+async function selfTest(log){
+  const res={pass:false,speedup:null,notes:[]};
+  // 1. API + adapter + device + shaders
+  log("api","run"); if(!("gpu" in navigator)){log("api","fail","navigator.gpu is missing: this browser/context has no WebGPU. Chrome/Edge 113+ on Windows, macOS and ChromeOS support it; Linux, Firefox and Safari support depends on version and flags."); return res;}
+  log("api","ok",window.isSecureContext?"navigator.gpu present":"present (insecure context)");
+  log("dev","run");
+  try{ await gpuInit(); }catch(e){ log("dev","fail",e.message); return res; }
+  const I=GPU.info||{}, name=[I.vendor,I.architecture,I.device,I.description].filter(Boolean).join(" · ")||"unnamed adapter";
+  log("dev",GPU.software?"warn":"ok",`${name}${GPU.software?" — software/fallback adapter (runs on the CPU, not a real GPU)":""}; max buffer ${(GPU.limits.maxStorageBufferBindingSize/1048576).toFixed(0)} MB`);
+  // largest supported grid
+  const need=n=>{let M=n; if(n&(n-1)){M=1; while(M<2*n-1) M<<=1;} return n*M*8;};
+  const grids=[256,512,1024,1064,2048,2128].filter(n=>need(n)<=Math.min(GPU.limits.maxStorageBufferBindingSize,GPU.limits.maxBufferSize));
+  GPU.maxGrid=grids[grids.length-1]||0;
+  // 2. radix-2 FFT vs CPU (f64)
+  const fftCheck=async(key,N)=>{ log(key,"run"); const [r0,i0]=randField(N,N);
+    const gr=Float64Array.from(r0), gi=Float64Array.from(i0); await gpuFFT2(gr,gi,N,false);
+    const cr=Float64Array.from(r0), ci=Float64Array.from(i0); cpuRef(N,cr,ci,false); const eF=relErr(gr,gi,cr,ci);
+    await gpuFFT2(gr,gi,N,true); const eR=relErr(gr,gi,r0,i0); const ok=eF<1e-4&&eR<1e-4;
+    log(key,ok?"ok":"fail",`forward error ${eF.toExponential(1)}, round-trip error ${eR.toExponential(1)} (limit 1e-4)`); return ok; };
+  try{
+    if(!await fftCheck("fft2",256)) return res;
+    if(!await fftCheck("fftb",152)) return res;              // 152 = 8·19: exercises the Bluestein path used for 1064/2128
+    // 3. propagation (band-limited angular spectrum) vs CPU
+    log("prop","run"); const N=256, dx=1.1, z=900, lam=0.532; const [r0,i0]=randField(N,7);
+    const gr=Float64Array.from(r0), gi=Float64Array.from(i0); await gpuPropagate(gr,gi,N,dx,z,lam);
+    const cr=Float64Array.from(r0), ci=Float64Array.from(i0); propagate(cr,ci,N,dx,z,lam); const eP=relErr(gr,gi,cr,ci);
+    const okP=eP<2e-3; log("prop",okP?"ok":"fail",`error ${eP.toExponential(1)} vs 64-bit CPU (limit 2e-3)`); if(!okP) return res;
+    // 4. speed: one 1024² propagation, GPU vs CPU
+    log("speed","run"); const Nb=1024; const [br,bi]=randField(Nb,3);
+    let a=Float64Array.from(br), b=Float64Array.from(bi); await gpuPropagate(a,b,Nb,0.5,500,lam);   // warm-up (allocation, pipelines)
+    let t=performance.now(); a=Float64Array.from(br); b=Float64Array.from(bi); await gpuPropagate(a,b,Nb,0.5,500,lam); const tg=performance.now()-t;
+    await new Promise(r=>setTimeout(r,0));
+    t=performance.now(); a=Float64Array.from(br); b=Float64Array.from(bi); propagate(a,b,Nb,0.5,500,lam); const tc=performance.now()-t;
+    kerCache.clear();
+    res.speedup=tc/tg; GPU.tg=tg; GPU.tc=tc;
+    log("speed",res.speedup>1.2?"ok":"warn",`1024² propagation: GPU ${tg.toFixed(0)} ms (incl. transfers) vs CPU ${tc.toFixed(0)} ms → ${res.speedup.toFixed(1)}×${res.speedup>1.2?"":" — no gain on this machine"}`);
+  }catch(e){ log("prop","fail","GPU error: "+e.message); return res; }
+  res.pass=true; return res;
+}
+
+let ENGINE="cpu";
+async function prop(re,im,N,dx,z,lam){ return ENGINE==="gpu"?gpuPropagate(re,im,N,dx,z,lam):propagate(re,im,N,dx,z,lam); }
+function setEngine(e,why){ ENGINE=e; const el=$("engine"), I=GPU.info||{};
+  if(e==="gpu"){el.className="pill ok"; el.textContent="engine: GPU"+(I.vendor?" · "+I.vendor:""); el.title=[I.vendor,I.architecture,I.description].filter(Boolean).join(" · ");}
+  else {el.className="pill warn"; el.textContent="engine: CPU"; el.title=why||"";} }
+async function gpuFailed(e){ console.error(e); setEngine("cpu","GPU error: "+e.message); setStatus("bad","GPU error ("+e.message+"): switched to CPU"); }
+// ---------------------------------------------------------------- pipeline
+let last=null;
+const planeMode=()=>S.src!=="fiber"&&!S.lens&&!S.pin;   // collimated beam straight onto the sample: no magnification
+const pxGrid=()=>S.psr?S.px/S.K:S.px;                     // pitch of the simulation grid at the camera
+function geom(z1mm){const L=S.L, z12=L-z1mm, p=pxGrid(); if(planeMode()) return {z12, M:1, dx:p, zeff:z12*1e3}; const M=L/z1mm; return {z12, M, dx:p/M, zeff:z1mm*1e3*z12/L};}
+async function compute(){
+  const t0=performance.now();
+  const {lam,N}=S; const G=geom(S.z1);
+  const smp=makeSample(N,G.dx,lam);
+  const ill=illumination(N,G.dx,S.z1*1e3,lam);         // clean model (what the reconstruction assumes)
+  const illD=await applyDirt(ill,N,G.dx,lam);                    // what the sample really sees
+  // sample field and reference field (same illumination, no sample)
+  const re=new Float64Array(N*N), im=new Float64Array(N*N), rr=Float64Array.from(illD.re), ri=Float64Array.from(illD.im);
+  for(let q=0;q<N*N;q++){const tr=smp.amp[q]*Math.cos(smp.ph[q]), ti=smp.amp[q]*Math.sin(smp.ph[q]); re[q]=illD.re[q]*tr-illD.im[q]*ti; im[q]=illD.re[q]*ti+illD.im[q]*tr;}
+  const ulim=await prop(re,im,N,G.dx,G.zeff,lam);
+  await prop(rr,ri,N,G.dx,G.zeff,lam);
+  const r=rng(12345), sig=S.noise/100;
+  const Ih=new Float64Array(N*N), Ib=new Float64Array(N*N); for(let q=0;q<N*N;q++){Ih[q]=re[q]*re[q]+im[q]*im[q]; Ib[q]=rr[q]*rr[q]+ri[q]*ri[q];}
+  const K=S.psr?S.K:1, n=Math.floor(N/K);                               // physical sensor: n × n pixels, each covering K × K grid cells
+  // detector: rel. intensity (mean over one physical pixel) → detected rel. intensity
+  let ePix=0, levels=2**S.bits-1, FW=S.FW, phot=null, stats={peak:0,sat:0,cnt:0};
+  const pois=(m)=>{ if(m<30){const L=Math.exp(-m); let k=0,p=1; do{k++; p*=r();}while(p>L); return k-1;} return m+Math.sqrt(m)*gauss(r); };
+  let Psens=0,Nph=0;
+  if(S.phot){ const hnu=6.62607e-34*2.99792e8/(lam*1e-6); Psens=S.P*1e-3*ill.B.light*ill.frac; Nph=Psens*S.texp*1e-3/hnu;
+    let sb=0; for(let q=0;q<N*N;q++) sb+=Ib[q]; ePix=S.QE*Nph/Math.max(sb,1e-30)*K*K; }       // electrons per unit rel. intensity per physical pixel
+  const detect=(I,count)=>{ if(!S.phot) return Math.max(0,I+sig*gauss(r)*(count?1:0.3));
+    const e0=I*ePix; let e=pois(e0)+S.rn*gauss(r); e=Math.max(0,Math.min(FW,e)); const dn=Math.round(e/FW*levels);
+    if(count){ if(e0>stats.peak) stats.peak=e0; if(dn>=levels) stats.sat++; stats.cnt++; } return dn*FW/levels/ePix; };
+  const holo=new Float64Array(N*N), bg=new Float64Array(N*N);
+  // frames: shift (u,v) in grid cells; a physical pixel (I,J) of that frame integrates cells [I·K+u, I·K+u+K)
+  const frames=S.psr&&S.psrMode==="psr"?K:1;
+  for(let v=0;v<frames;v++)for(let u=0;u<frames;u++){
+    for(let J=0;J<n;J++)for(let I=0;I<n;I++){ let sh=0,sbg=0;
+      for(let y=0;y<K;y++)for(let x=0;x<K;x++){const q=((J*K+v+y)%N)*N+((I*K+u+x)%N); sh+=Ih[q]; sbg+=Ib[q];}
+      const dh=detect(sh/(K*K),true), db=detect(sbg/(K*K),false);
+      if(frames>1){ const q=((J*K+v+Math.floor((K-1)/2))%N)*N+((I*K+u+Math.floor((K-1)/2))%N); holo[q]=dh; bg[q]=db; }   // shift-and-add: one sample per fine cell
+      else { for(let y=0;y<K;y++)for(let x=0;x<K;x++){const q=(J*K+y)*N+(I*K+x); holo[q]=dh; bg[q]=db;} }            // single frame: native pixels (blocks)
+    }}
+  if(S.phot){ let bmax=0; for(let q=0;q<N*N;q++) if(Ib[q]>bmax) bmax=Ib[q]; let sumE=0,c=0; for(let q=0;q<N*N;q++) if(Ib[q]>0.25*bmax){sumE+=Ib[q]*ePix; c++;}
+    const mean=sumE/Math.max(c,1);
+    phot={Psens,Nph,peak:stats.peak,sat:stats.sat/Math.max(stats.cnt,1),mean,snr:mean/Math.sqrt(mean+S.rn*S.rn+1e-12),ePerMs:ePix/S.texp,peakRel:stats.peak/ePix,frames:frames*frames}; }
+  last={N,dx:G.dx,M:G.M,zeff:G.zeff,z12:G.z12,ulim,smp,holo,bg,ill,t0,phot};
+  await reconstruct();
+  last.tForward=performance.now()-t0; last.engine=ENGINE;
+  drawAll();
+}
+function recGeometry(){ // reconstruction with an assumed pinhole–sample distance z1 + dz
+  const zr=Math.min(S.L-0.05,Math.max(0.02,S.z1+S.dz*1e-3)); const G=geom(zr); return {zr,dxr:G.dx,zeffr:G.zeff};
+}
+// camera-plane start field and the illumination used to divide it out, for the assumed geometry
+async function recSetup(){
+  const {N,holo,bg}=last, {zr,dxr,zeffr}=recGeometry();
+  const ill= (S.dz===0) ? last.ill : illumination(N,dxr,zr*1e3,S.lam);
+  const rr=Float64Array.from(ill.re), ri=Float64Array.from(ill.im); await prop(rr,ri,N,dxr,zeffr,S.lam);
+  const amp=new Float64Array(N*N), cph=new Float64Array(N*N), sph=new Float64Array(N*N);
+  let mb=0; for(let q=0;q<N*N;q++) if(bg[q]>mb) mb=bg[q];
+  for(let q=0;q<N*N;q++){amp[q]=Math.sqrt(holo[q]); const m=Math.hypot(rr[q],ri[q]); cph[q]=m>0?rr[q]/m:1; sph[q]=m>0?ri[q]/m:0;}
+  let aMax=0; for(let q=0;q<N*N;q++){const a=Math.hypot(ill.re[q],ill.im[q]); if(a>aMax) aMax=a;}
+  return {amp,cph,sph,ill,aMax,dxr,zeffr};
+}
+// divide the sample-plane field by the illumination (Wiener-regularised)
+function divideIll(re,im,ill,aMax){
+  const e2=(0.08*aMax)**2;
+  for(let q=0;q<re.length;q++){const ar=ill.re[q], ai=ill.im[q], d=ar*ar+ai*ai+e2, a=re[q], b=im[q]; re[q]=(a*ar+b*ai)/d; im[q]=(b*ar-a*ai)/d;}
+}
+function multiplyIll(re,im,ill){for(let q=0;q<re.length;q++){const ar=ill.re[q], ai=ill.im[q], a=re[q], b=im[q]; re[q]=a*ar-b*ai; im[q]=a*ai+b*ar;}}
+async function reconstruct(){
+  const {N}=last; const R=await recSetup();
+  const re=new Float64Array(N*N), im=new Float64Array(N*N);
+  if(S.bgdiv){ // measured background tells us the reference: use its modelled phase, then divide out the illumination
+    for(let q=0;q<N*N;q++){re[q]=R.amp[q]*R.cph[q]; im[q]=R.amp[q]*R.sph[q];}
+    await prop(re,im,N,R.dxr,-R.zeffr,S.lam); divideIll(re,im,R.ill,R.aMax);
+  } else {     // naive: treat the reference as a flat plane wave
+    let m=0; for(let q=0;q<N*N;q++) m+=last.holo[q]; m/=N*N; for(let q=0;q<N*N;q++) re[q]=Math.sqrt(last.holo[q]/m);
+    await prop(re,im,N,R.dxr,-R.zeffr,S.lam);
+  }
+  last.rec={re,im,dxr:R.dxr,iter:0,ill:R.ill,aMax:R.aMax};
+}
+// object-plane constraint for the iterative twin-image removal (acts on the transmission t)
+function applyConstraint(re,im,N,ill,aMax){
+  const lit=q=>(ill.re[q]*ill.re[q]+ill.im[q]*ill.im[q])>(0.3*aMax)**2;
+  if(S.cons==="phase"){
+    const r=rng(99), smp=[]; for(let k=0;k<20000&&smp.length<4096;k++){const q=Math.floor(r()*N*N); if(lit(q)) smp.push(Math.atan2(im[q],re[q]));}
+    smp.sort((a,b)=>a-b); const off=smp.length?smp[Math.floor(0.2*smp.length)]:0;
+    for(let q=0;q<N*N;q++){let p=Math.atan2(im[q],re[q])-off; if(p>Math.PI)p-=2*Math.PI; if(p<-Math.PI)p+=2*Math.PI; p=Math.max(0,p); re[q]=Math.cos(p); im[q]=Math.sin(p);}
+  } else {
+    for(let q=0;q<N*N;q++){const a=Math.hypot(re[q],im[q]); if(a>1){re[q]/=a; im[q]/=a;}}
+  }
+}
+let job=0;
+async function iterateCPU(){
+  const my=++job; const {N}=last, R=await recSetup(), total=S.iters;
+  let re=new Float64Array(N*N), im=new Float64Array(N*N); for(let q=0;q<N*N;q++){re[q]=R.amp[q]*R.cph[q]; im[q]=R.amp[q]*R.sph[q];}
+  let n=0; $("prog").hidden=false; $("prog").value=0; $("runIt").disabled=true; setStatus("warn","Removing twin image…");
+  const step=()=>{
+    if(my!==job) return;
+    const t=performance.now();
+    while(n<total && performance.now()-t<60){
+      propagate(re,im,N,R.dxr,-R.zeffr,S.lam);            // camera → sample plane: field = A·t
+      divideIll(re,im,R.ill,R.aMax);                        // t
+      applyConstraint(re,im,N,R.ill,R.aMax);
+      multiplyIll(re,im,R.ill);                             // A·t
+      propagate(re,im,N,R.dxr,R.zeffr,S.lam);               // back to camera
+      for(let q=0;q<N*N;q++){const p=Math.atan2(im[q],re[q]); re[q]=R.amp[q]*Math.cos(p); im[q]=R.amp[q]*Math.sin(p);}
+      n++;
+    }
+    $("prog").value=n/total;
+    if(n<total){requestAnimationFrame(step);return;}
+    propagate(re,im,N,R.dxr,-R.zeffr,S.lam); divideIll(re,im,R.ill,R.aMax); applyConstraint(re,im,N,R.ill,R.aMax);
+    last.rec={re,im,dxr:R.dxr,iter:total,ill:R.ill,aMax:R.aMax}; $("prog").hidden=true; $("runIt").disabled=false; drawAll();
+  };
+  requestAnimationFrame(step);
+}
+// GPU-resident twin-image loop: the field stays on the GPU; only 4096 phase samples come back per iteration (phase constraint)
+async function iterateGPU(){
+  const my=++job; const {N}=last, R=await recSetup(), total=S.iters, NN=N*N, t0=performance.now();
+  $("prog").hidden=false; $("prog").value=0; $("runIt").disabled=true; setStatus("warn","Removing twin image on the GPU…");
+  const idx=[]; { const lit=q=>(R.ill.re[q]**2+R.ill.im[q]**2)>(0.3*R.aMax)**2, r=rng(99); for(let k=0;k<20000&&idx.length<4096;k++){const q=Math.floor(r()*NN); if(lit(q)) idx.push(q);} }
+  const [la,lb]=lin(NN), e2=(0.08*R.aMax)**2;
+  await withGPU(async()=>{ await ensureN(N); const B=GPU.bufs;
+    const f=new Float32Array(2*NN), A=new Float32Array(2*NN), am=new Float32Array(NN);
+    for(let q=0;q<NN;q++){f[2*q]=R.amp[q]*R.cph[q]; f[2*q+1]=R.amp[q]*R.sph[q]; A[2*q]=R.ill.re[q]; A[2*q+1]=R.ill.im[q]; am[q]=R.amp[q];}
+    GPU.dev.queue.writeBuffer(B.F,0,f); GPU.dev.queue.writeBuffer(B.A,0,A); GPU.dev.queue.writeBuffer(B.amp,0,am); GPU.dev.queue.writeBuffer(B.idx,0,new Uint32Array(idx.length?idx:[0])); });
+  const constrain=async(enc)=>{ const B=GPU.bufs;
+    if(S.cons==="phase"){ run(enc,"gather",uni(idx.length,0,0,0),[B.F,B.idx,B.gout],Math.max(1,Math.ceil(idx.length/WG)));
+      enc.copyBufferToBuffer(B.gout,0,B.rdS,0,4096*4); GPU.dev.queue.submit([enc.finish()]);
+      await B.rdS.mapAsync(GPUMapMode.READ,0,4096*4); const smp=Array.from(new Float32Array(B.rdS.getMappedRange(0,4096*4)).subarray(0,idx.length)); B.rdS.unmap();
+      smp.sort((a,b)=>a-b); const off=smp.length?smp[Math.floor(0.2*smp.length)]:0;
+      enc=GPU.dev.createCommandEncoder(); run(enc,"consPhase",uni(NN,0,0,0,off),[B.F],la,lb); }
+    else run(enc,"consAbs",uni(NN,0,0,0),[B.F],la,lb);
+    return enc; };
+  let n=0;
+  while(n<total){
+    if(my!==job) return;
+    await withGPU(async()=>{ const B=GPU.bufs; if(GPU.N!==N) throw new Error("grid changed");
+      let enc=GPU.dev.createCommandEncoder();
+      propEnc(enc,N,B.F,R.dxr,-R.zeffr,S.lam); run(enc,"divIll",uni(NN,0,0,0,e2),[B.F,B.A],la,lb);
+      enc=await constrain(enc);
+      run(enc,"mulIll",uni(NN,0,0,0),[B.F,B.A],la,lb); propEnc(enc,N,B.F,R.dxr,R.zeffr,S.lam); run(enc,"ampRepl",uni(NN,0,0,0),[B.F,B.amp],la,lb);
+      GPU.dev.queue.submit([enc.finish()]); await GPU.dev.queue.onSubmittedWorkDone(); });
+    n++; $("prog").value=n/total;
+  }
+  if(my!==job) return;
+  const re=new Float64Array(NN), im=new Float64Array(NN);
+  await withGPU(async()=>{ const B=GPU.bufs; let enc=GPU.dev.createCommandEncoder();
+    propEnc(enc,N,B.F,R.dxr,-R.zeffr,S.lam); run(enc,"divIll",uni(NN,0,0,0,e2),[B.F,B.A],la,lb); enc=await constrain(enc); await download(enc,B.F,re,im); });
+  if(my!==job) return;
+  last.rec={re,im,dxr:R.dxr,iter:total,ill:R.ill,aMax:R.aMax}; last.tIter=performance.now()-t0; $("prog").hidden=true; $("runIt").disabled=false; drawAll();
+  setStatus("ok",`${total} twin-image iterations on the GPU in ${(last.tIter/1000).toFixed(1)} s`);
+}
+async function iterate(){
+  if(ENGINE==="gpu"){ try{ await iterateGPU(); return; }catch(e){ await gpuFailed(e); $("prog").hidden=true; $("runIt").disabled=false; } }
+  iterateCPU();
+}
+
+// ---------------------------------------------------------------- drawing
+function viridisLike(t){ // perceptual map for phase: deep blue → teal → yellow
+  const c=[[0.05,0.03,0.25],[0.13,0.28,0.55],[0.12,0.55,0.55],[0.36,0.78,0.38],[0.99,0.9,0.15]];
+  t=Math.max(0,Math.min(1,t))*(c.length-1); const i=Math.min(c.length-2,Math.floor(t)), f=t-i;
+  return c[i].map((v,k)=>Math.round(255*(v+(c[i+1][k]-v)*f)));
+}
+const LUT=[...Array(256)].map((_,i)=>viridisLike(i/255));
+function paint(cv,N,val,mode,lo,hi){
+  const off=paint.off||(paint.off=document.createElement("canvas")); off.width=off.height=N;
+  const g=off.getContext("2d"), img=g.createImageData(N,N), D=img.data;
+  for(let q=0;q<N*N;q++){const k=q*4; if(val[q]!==val[q]){D[k]=24;D[k+1]=28;D[k+2]=33;D[k+3]=255;continue;} let t=(val[q]-lo)/(hi-lo); t=Math.max(0,Math.min(1,t));
+    if(mode==="phase"){const c=LUT[Math.round(t*255)]; D[k]=c[0];D[k+1]=c[1];D[k+2]=c[2];}
+    else {const v=Math.round(255*t); D[k]=D[k+1]=D[k+2]=v;} D[k+3]=255;}
+  g.putImageData(img,0,0);
+  const c=cv.getContext("2d"), z=S.zoom||1, sw=N/z, sx=(N-sw)/2; c.imageSmoothingEnabled=false; c.clearRect(0,0,cv.width,cv.height); c.drawImage(off,sx,sx,sw,sw,0,0,cv.width,cv.height);
+}
+function scaleBar(cv,umPerCanvasPx,labelUnits){ umPerCanvasPx/=(S.zoom||1);
+  const c=cv.getContext("2d"), W=cv.width; const target=W*0.25*umPerCanvasPx; const pow=10**Math.floor(Math.log10(target)); const nice=[1,2,5,10].map(m=>m*pow).filter(v=>v<=target).pop()||pow;
+  const len=nice/umPerCanvasPx; c.fillStyle="rgba(0,0,0,.55)"; c.fillRect(10,W-34,len+16,24); c.fillStyle="#fff"; c.fillRect(18,W-18,len,4);
+  c.font=`12px ${css("--mono")}`; c.textAlign="left"; c.fillText(nice>=1000?(nice/1000)+" mm":nice+" µm",18,W-22);
+}
+const wrap=p=>{p=(p+Math.PI)%(2*Math.PI); if(p<0)p+=2*Math.PI; return p-Math.PI;};
+function drawAll(){
+  const {N,dx,smp,holo,rec}=last; const W=$("c-holo").width;
+  // hologram (camera coordinates)
+  let hmax=0; for(let q=0;q<N*N;q++) if(holo[q]>hmax) hmax=holo[q];
+  paint($("c-holo"),N,holo,"grey",0,Math.min(hmax,2.2));
+  scaleBar($("c-holo"),pxGrid()*N/W);
+  $("l-holo").textContent=S.psr?`${(pxGrid()*N/1000).toFixed(2)} mm · ${S.psrMode==="psr"?`PSR ${S.K*S.K} frames`:"1 frame"}`:`${(S.px*N/1000).toFixed(2)} mm sensor`;
+  // truth
+  if(S.truthAmp){paint($("c-truth"),N,smp.amp,"grey",0,1.2);}
+  else {const w=new Float64Array(N*N); for(let q=0;q<N*N;q++) w[q]=wrap(smp.ph[q]); paint($("c-truth"),N,w,"phase",-Math.PI,Math.PI);}
+  scaleBar($("c-truth"),dx*N/W); $("l-truth").textContent=`${(dx*N).toFixed(0)} µm field`;
+  // reconstruction
+  const A=new Float64Array(N*N), P=new Float64Array(N*N);
+  for(let q=0;q<N*N;q++){A[q]=Math.hypot(rec.re[q],rec.im[q]); P[q]=Math.atan2(rec.im[q],rec.re[q]);}
+  if(S.bgdiv&&rec.ill){const t2=(0.25*rec.aMax)**2; for(let q=0;q<N*N;q++){const a=rec.ill.re[q]**2+rec.ill.im[q]**2; if(a<t2){A[q]=NaN;P[q]=NaN;}}}
+  paint($("c-ramp"),N,A,"grey",0,1.6); scaleBar($("c-ramp"),rec.dxr*N/W);
+  paint($("c-rph"),N,P,"phase",-Math.PI,Math.PI); scaleBar($("c-rph"),rec.dxr*N/W);
+  const lab=rec.iter?`iterative · ${rec.iter} it.`:"direct";
+  $("l-ramp").textContent=lab; $("l-rph").textContent=S.dz===0?"in focus":`Δz ${S.dz>0?"+":""}${S.dz} µm`;
+  drawProfile(A,P); drawSetup(); readouts(); updateOutputs();
+}
+function drawProfile(A,P){
+  const cv=$("c-prof"), g=cv.getContext("2d"), W=cv.width, H=cv.height, {N,dx,smp,rec}=last; g.clearRect(0,0,W,H);
+  const j=Math.max(0,Math.min(N-1,Math.round(N/2+S.row*N)));
+  const useAmp=S.truthAmp, ml=46, mr=10, mt=10, mb=26, pw=W-ml-mr, ph=H-mt-mb;
+  const lo=useAmp?0:-Math.PI, hi=useAmp?1.5:Math.PI;
+  const z=S.zoom||1, i0=Math.round(N/2-N/(2*z)), i1=Math.round(N/2+N/(2*z))-1;
+  const Y=v=>mt+ph*(1-(v-lo)/(hi-lo)), Xs=i=>ml+pw*(i-i0)/(i1-i0);
+  g.strokeStyle="#2b3540"; g.lineWidth=1; g.fillStyle=css("--muted"); g.font=`11px ${css("--mono")}`; g.textAlign="right"; g.textBaseline="middle";
+  const ticks=useAmp?[0,0.5,1,1.5]:[-Math.PI,-Math.PI/2,0,Math.PI/2,Math.PI], tl=useAmp?["0","0.5","1","1.5"]:["−π","−π/2","0","π/2","π"];
+  ticks.forEach((t,k)=>{g.beginPath();g.moveTo(ml,Y(t));g.lineTo(W-mr,Y(t));g.stroke(); g.fillText(tl[k],ml-6,Y(t));});
+  g.textAlign="center"; g.textBaseline="top"; const half=N*dx/2/z; [-1,-.5,0,.5,1].forEach(f=>{g.fillText((f*half).toFixed(0)+" µm",ml+pw*(f+1)/2,H-mb+6);});
+  const line=(arr,col,lw,dash)=>{g.strokeStyle=col;g.lineWidth=lw;g.setLineDash(dash||[]);g.beginPath();let st=false; for(let i=i0;i<=i1;i++){const v=arr(i); if(v!==v){st=false;continue;} const y=Y(Math.max(lo,Math.min(hi,v))); st?g.lineTo(Xs(i),y):g.moveTo(Xs(i),y); st=true;}g.stroke();g.setLineDash([]);};
+  line(i=>useAmp?smp.amp[j*N+i]:wrap(smp.ph[j*N+i]),css("--truth"),2,[5,4]);
+  // reconstruction sampled on its own grid (dxr may differ when refocusing): map to truth coordinates
+  line(i=>{const x=(i-N/2)*dx, ir=Math.round(x/rec.dxr+N/2), jr=Math.round((j-N/2)*dx/rec.dxr+N/2); if(ir<0||ir>=N||jr<0||jr>=N) return NaN; const q=jr*N+ir; return useAmp?A[q]:P[q];},css("--accent"),1.5);
+}
+function drawSetup(){
+  const cv=$("setup"), g=cv.getContext("2d"), W=cv.width, H=cv.height; g.clearRect(0,0,W,H);
+  const beam=css("--beam"), cy=H/2;
+  g.fillStyle="#232b33"; for(let x=10;x<W;x+=25)for(let y=10;y<H;y+=25){g.beginPath();g.arc(x,y,1.5,0,7);g.fill();}
+  const xp=250, xc=900, xs=xp+(xc-xp)*Math.sqrt(S.z1/S.L), sensorH=150, half=sensorH/2;
+  // laser
+  g.fillStyle="#2c3a48"; g.strokeStyle="#5c7a96"; g.lineWidth=1.5; g.fillRect(20,cy-18,95,36); g.strokeRect(20,cy-18,95,36);
+  g.fillStyle=css("--fg"); g.font=`600 14px ${css("--display")}`; g.textAlign="center"; g.textBaseline="middle"; g.fillText(S.src==="fiber"?"diode":"laser",67,cy);
+  if(S.src==="fiber"){
+    g.strokeStyle="#e8a33b"; g.lineWidth=3; g.beginPath(); g.moveTo(115,cy); g.bezierCurveTo(160,cy+50,200,cy-50,xp,cy); g.stroke();
+    g.fillStyle=css("--muted"); g.font=`12px ${css("--display")}`; g.fillText(`single-mode fibre, MFD ${S.mfd.toFixed(1)} µm`,182,cy+46);
+  } else if(S.lens){
+    const bh=Math.max(3,Math.min(44,S.Db*8)); g.fillStyle=beam; g.globalAlpha=.55; g.fillRect(115,cy-bh/2,50,bh); g.globalAlpha=1;
+    const dl=(S.sl-S.fl)*1000, xl=xp-100, xf=xp-Math.sign(dl)*Math.min(80,Math.sqrt(Math.abs(dl))*3), h2=Math.min(22,bh/2); // focus offset exaggerated (√Δ)
+    g.strokeStyle=beam; g.globalAlpha=.9; g.lineWidth=5; g.beginPath(); g.moveTo(165,cy); g.lineTo(xl,cy); g.stroke(); g.lineWidth=1.5; g.globalAlpha=.8;
+    const yAt=x=>h2*(1-(x-xl)/(xf-xl)); g.beginPath(); g.moveTo(xl,cy-h2); g.lineTo(xp,cy-yAt(xp)); g.moveTo(xl,cy+h2); g.lineTo(xp,cy+yAt(xp)); g.stroke(); g.globalAlpha=1;
+    g.fillStyle="rgba(124,196,255,.2)"; g.strokeStyle=css("--accent"); g.lineWidth=1.5; g.beginPath(); g.ellipse(xl,cy,7,26,0,0,7); g.fill(); g.stroke();
+    if(xf>xl && xf<xc){g.fillStyle="#fff"; g.beginPath(); g.arc(xf,cy,3,0,7); g.fill(); g.fillStyle=css("--muted"); g.font=`11px ${css("--display")}`; g.fillText("focus",xf,cy+(xf<xp?-34:34));}
+    g.fillStyle=css("--muted"); g.font=`12px ${css("--display")}`; g.fillText(`lens f ${S.fl.toFixed(1)} mm`,xl,cy+Math.max(42,bh/2+14));
+    g.fillText(`s = ${S.sl.toFixed(3)} mm`,(xl+xp)/2,cy-48);
+  } else {
+    const bh2=Math.max(3,Math.min(44,S.Db*8)); g.fillStyle=beam; g.globalAlpha=.4; g.fillRect(115,cy-bh2/2,xp-115,bh2); g.globalAlpha=1;
+    g.fillStyle=css("--muted"); g.font=`12px ${css("--display")}`; g.fillText(`collimated beam, Ø ${S.Db.toFixed(2)} mm`,182,cy-Math.max(20,bh2/2+10));
+  }
+  // illumination cone (drawn from the computed cone angle, clamped to the sensor)
+  const c=last?last.cone:null; let hh=half;
+  if(c){ const rCam=(S.L*1e3*Math.tan(c.theta)+S.dp/2), rel=rCam/(S.N*pxGrid()/2); hh=Math.max(4,Math.min(half*1.25,rel*half)); }
+  const pinH=Math.max(3,Math.min(24,S.dp/100*24));
+  const grd=g.createLinearGradient(xp,0,xc,0); grd.addColorStop(0,beam+"66"); grd.addColorStop(1,beam+"14");
+  g.fillStyle=grd; g.beginPath(); g.moveTo(xp,cy-pinH/2); g.lineTo(xc,cy-hh); g.lineTo(xc,cy+hh); g.lineTo(xp,cy+pinH/2); g.closePath(); g.fill();
+  g.strokeStyle=css("--truth"); g.globalAlpha=.55; g.lineWidth=1;
+  for(let k=1;k<=4;k++){const r=(xc-xs)*k/4.4; g.beginPath(); g.arc(xs,cy,r,-0.28,0.28); g.stroke();} g.globalAlpha=1;
+  // pinhole plate with an opening that grows with the diameter
+  if(S.src==="fiber"){ g.fillStyle="#e8a33b"; g.fillRect(xp-6,cy-3,8,6); g.fillStyle=css("--fg"); g.font=`600 14px ${css("--display")}`; g.fillText("fibre tip",xp,cy-76); }
+  else if(S.pin){ g.fillStyle="#aab6c2"; g.fillRect(xp-3,cy-62,6,62-pinH/2); g.fillRect(xp-3,cy+pinH/2,6,62-pinH/2);
+    g.fillStyle=css("--fg"); g.font=`600 14px ${css("--display")}`; g.fillText("pinhole",xp,cy-76); g.font=`12px ${css("--mono")}`; g.fillStyle=css("--muted"); g.fillText(`Ø ${fmt.dp(S.dp)}`,xp,cy+78); }
+  else { g.strokeStyle=css("--muted"); g.setLineDash([4,4]); g.strokeRect(xp-3,cy-62,6,124); g.setLineDash([]); g.fillStyle=css("--muted"); g.font=`600 14px ${css("--display")}`; g.fillText("no pinhole",xp,cy-76); }
+  g.fillStyle="rgba(232,163,59,.25)"; g.strokeStyle=css("--truth"); g.lineWidth=1.5; g.fillRect(xs-4,cy-62,8,124); g.strokeRect(xs-4,cy-62,8,124);
+  g.fillStyle=css("--fg"); g.font=`600 14px ${css("--display")}`; g.fillText("sample",xs,xc-xs<90?cy+80:cy-76);
+  g.fillStyle="#2c3a48"; g.fillRect(xc,cy-half-6,28,sensorH+12); g.fillStyle="#58708a"; g.fillRect(xc,cy-half,6,sensorH);
+  g.fillStyle=css("--fg"); g.fillText("camera",xc+14,cy-half-22);
+  const dim=(x0,x1,y,t)=>{g.strokeStyle=css("--muted"); g.lineWidth=1; g.beginPath(); g.moveTo(x0,y); g.lineTo(x1,y); g.moveTo(x0,y-5); g.lineTo(x0,y+5); g.moveTo(x1,y-5); g.lineTo(x1,y+5); g.stroke();
+    g.fillStyle=css("--fg"); g.font=`12px ${css("--mono")}`; g.fillText(t,(x0+x1)/2,y-10);};
+  dim(xp,xs,H-18,`z₁ = ${S.z1.toFixed(2)} mm`); dim(xp,xc,18,`L = ${S.L.toFixed(1)} mm`);
+}
+function readouts(){
+  const {N,dx,M,zeff,z12,ill}=last; const lam=S.lam, p=pxGrid(), d=S.dp;
+  // illumination cone half-angle
+  const thAiry=Math.asin(Math.min(1,1.22*lam/d)), B=ill.B;
+  const thBeam=S.lens?Math.asin(Math.min(1,B.NAw,B.del?(d/2)/Math.abs(B.del):1)):Math.asin(Math.min(1,lam/(Math.PI*B.w)));
+  let theta, illTxt, illSub;
+  if(B.fiber){theta=Math.asin(Math.min(1,B.NAw)); illTxt="fibre point source"; illSub=`MFD ${S.mfd.toFixed(1)} µm → NA ${B.NAw.toFixed(3)} (1/e²)`;}
+  else if(ill.mode==="plane"){theta=Math.asin(Math.min(1,lam/(Math.PI*B.w))); illTxt="plane wave (no pinhole)"; illSub="collimated beam: Gabor hologram, M ≈ 1";}
+  else if(!S.pin&&ill.mode==="focus"){theta=Math.asin(Math.min(1,B.NAw)); illTxt="lens focus (no pinhole)"; illSub=`source = focus Ø ${ill.spot.toFixed(1)} µm${B.del?`, ${Math.abs(B.del).toFixed(0)} µm ${B.del>0?"before":"after"} the pinhole plane`:""} · not filtered`;}
+  else if(ill.mode==="airy"){theta=thAiry; illTxt="point source"; illSub=`pinhole ≪ beam there: Airy cone, N_F = ${ill.NF.toFixed(3)}`;}
+  else if(ill.mode==="focus"){theta=thBeam; illTxt="focused spot"; illSub=B.del===0?`source = focus Ø ${ill.spot.toFixed(1)} µm in the pinhole`:`source = focus ${Math.abs(B.del).toFixed(0)} µm ${B.del>0?"before":"after"} the pinhole`;}
+  else if(ill.mode==="gauss"){theta=thBeam; illTxt="bare laser beam"; illSub="beam narrower than the pinhole";}
+  else {theta=Math.max(thAiry,thBeam); illTxt="clipped beam"; illSub=`beam Ø ${(2*(S.lens?B.wD:B.w)).toFixed(1)} µm in a ${d.toFixed(1)} µm pinhole · N_F ${ill.NF.toFixed(2)}`;}
+  last.cone={theta};
+  const pS=S.psr&&S.psrMode==='psr'?S.px/S.K:S.px, half=N*pxGrid()/2, xSamp=lam*z12*1e3*S.L*1e3/(2*pS*S.z1*1e3);
+  const xs={sensor:half, pixels:xSamp, illumination:ill.mode==="plane"?ill.aEff/2:(S.L*1e3+(ill.zs-S.z1*1e3))*Math.tan(theta)+ill.aEff/2};  // reference must cover the camera where object light lands
+  const lim=Object.entries(xs).sort((a,b)=>a[1]-b[1])[0];
+  const NA=Math.sin(Math.atan(lim[1]/(z12*1e3))), res=lam/(2*NA);
+  const lit=ill.mode==="plane"?Math.min(N*dx,ill.aEff):Math.min(N*dx, Math.max(ill.aEff, 2*Math.abs(ill.zs)*Math.tan(theta)));
+  const Meff=ill.mode==="plane"?1:(S.L*1e3+(ill.zs-S.z1*1e3))/ill.zs;
+  const light=B.light;
+  const items=[
+    ["Illumination",illTxt,illSub],
+    ["Magnification",`${(S.lens&&ill.mode!=="airy"?Meff:M).toFixed(1)}×`,S.lens&&ill.mode!=="airy"&&B.del?`source at the focus: (L+Δ)/(z₁+Δ)`:!S.lens&&ill.NF>1?"geometric L/z₁; shadow ≈ 1× in near field":"M = L / z₁"],
+    ["Field of view",`${(N*dx).toFixed(0)} µm`,`lit area ≈ ${lit.toFixed(0)} µm`],
+    ["Sample pixel",`${(dx*1000).toFixed(0)} nm`,planeMode()?"= pixel pitch (M = 1)":"pixel pitch / M"],
+    ["z_eff",`${(zeff/1000).toFixed(3)} mm`,planeMode()?"= L − z₁ (plane wave)":"z₁(L−z₁)/L"],
+    ["NA",NA.toFixed(3),`limited by ${lim[0]}`,true],
+    ["Resolution ≈ λ/2NA",`${res.toFixed(2)} µm`,"coherent, estimate"],
+    ["Cone half-angle",`${(theta*180/Math.PI).toFixed(2)}°`,ill.mode==="airy"?"1.22 λ / Ø (Airy)":S.lens?"lens NA or pinhole shadow":"beam / aperture divergence"],
+    (S.lens&&!B.fiber)?["Focus",`Ø ${B.spot.toFixed(2)} µm`,`working NA ${B.NAw.toFixed(3)}${B.over?" · lens overfilled":""}`,B.over]:null,
+    B.fiber?null:S.lens?["Beam at pinhole",`Ø ${(2*B.wD).toFixed(B.wD<5?2:0)} µm`,`Δ = s − f = ${B.del.toFixed(0)} µm · z_R ${B.zR.toFixed(1)} µm`,Math.abs(B.del)>B.zR]:["Beam at pinhole",`Ø ${S.Db.toFixed(2)} mm`,`${(2*B.w/d).toFixed(0)}× the pinhole`],
+    ["Light through pinhole",B.fiber?"fibre":!S.pin?"no pinhole":light>=0.01?`${(light*100).toFixed(0)} %`:light.toExponential(1),B.fiber?"coupling losses ignored":!S.pin?(S.lens&&ill.B.over?"lens clips the beam":"all of the beam"):`of a ${S.Db.toFixed(2)} mm beam`],
+    ["Compute",`${last.tForward?last.tForward.toFixed(0):"—"} ms`,`${N}×${N} FFT grid · ${last.engine==="gpu"?"GPU":"CPU"}`],
+  ];
+  if(S.psr){ const step=S.px/S.K, srcStep=step*S.z1/Math.max(z12,1e-6);
+    items.push(["Pixel super-resolution",S.psrMode==="psr"?`${S.K}×${S.K} = ${S.K*S.K} frames`:"single frame",`effective pixel ${pS.toFixed(2)} µm (native ${S.px} µm)`,S.psrMode!=="psr"]);
+    items.push(["Source step",`${srcStep<1000?srcStep.toFixed(1)+" µm":(srcStep/1000).toFixed(2)+" mm"}`,`moves the hologram by ${step.toFixed(2)} µm = 1/${S.K} pixel`]); }
+  const P=last.phot;
+  if(P){ const fmtE=v=>v>=1e4?v.toExponential(1):v>=10?v.toFixed(0):v.toFixed(1);
+    items.push(["Power on sensor",P.Psens>=1e-6?`${(P.Psens*1e6).toPrecision(3)} µW`:`${(P.Psens*1e9).toPrecision(3)} nW`,`${P.Nph.toExponential(2)} photons per exposure`]);
+    items.push(["Signal",`${fmtE(P.mean)} e⁻/px`,`mean in the lit area · full well ${S.FW}`, P.mean<50?"lim":""]);
+    items.push(["Peak / saturated",`${fmtE(P.peak)} e⁻ · ${(P.sat*100).toFixed(1)} %`,P.sat>0.001?"overexposed: shorten the exposure":"no saturation", P.sat>0.001]);
+    items.push(["SNR",P.snr.toFixed(1),"shot + read noise, per pixel", P.snr<10]); }
+  $("ro").innerHTML=items.filter(Boolean).map(([k,v,s,hl])=>`<div class="ro${hl?" lim":""}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
+  if(P && P.sat>0.01) setStatus("bad",`Overexposed: ${(P.sat*100).toFixed(0)} % of pixels saturated`);
+  else if(P && P.mean<20) setStatus("warn",`Too dark: ${P.mean.toFixed(1)} e⁻ per pixel, SNR ${P.snr.toFixed(1)}`);
+  else if(S.lens && ill.mode!=="airy" && ill.zs<0.2*S.z1*1e3) setStatus("bad","Focus lies near or behind the sample: move the lens back");
+  else if(!S.lens && ill.aEff/2>N*dx/2) setStatus("bad","Pinhole wider than the field of view: move the sample towards the camera");
+  else if(lim[0]==="illumination" && NA<0.05) setStatus("warn",`Only ${lit.toFixed(0)} µm of the sample is lit (fine for objects smaller than that)`);
+  else setStatus("ok",`Resolution ≈ ${res.toFixed(1)} µm · FOV ${(N*dx).toFixed(0)} µm`);
+}
+function setStatus(cls,t){const s=$("status"); s.className="pill "+cls; s.textContent=t;}
+
+// ---------------------------------------------------------------- UI wiring
+const DEC={mfd:1,Db:2,fl:1,sl:3,dirt:2,P:3,texp:4,QE:2,FW:0,rn:1,NA:2,dp:2,z1:2,L:1,px:2,noise:1,dz:0,iters:0,row:1};
+const fmt={Db:v=>v.toFixed(2),fl:v=>v.toFixed(1),dp:v=>v<10?v.toFixed(1)+" µm":v.toFixed(0)+" µm",z1:v=>v.toFixed(2)+" mm",L:v=>v.toFixed(1)+" mm",px:v=>v.toFixed(2)+" µm",noise:v=>v.toFixed(1)+" %",NA:v=>v.toFixed(2),dz:v=>(v>0?"+":"")+v+" µm",iters:v=>v+"",row:v=>(v*last.N*last.dx).toFixed(1)+" µm"};
+const numVal=k=>k==="row"?S.row*(last?last.N*last.dx:0):S[k];
+function updateOutputs(){for(const k in DEC){const o=$(k+"-o"); if(o&&document.activeElement!==o) o.value=(+numVal(k)).toFixed(DEC[k]);}}
+let timer=null;
+let busy=false, pend=null, started=false;
+async function runJob(what){
+  if(!started) return;
+  if(busy){ pend=(pend==="all"||what==="all")?"all":what; return; }
+  busy=true;
+  try{ if(what==="rec"){ await reconstruct(); drawAll(); } else await compute(); }
+  catch(e){ if(ENGINE==="gpu"){ await gpuFailed(e); busy=false; return runJob("all"); } console.error(e); setStatus("bad","Error: "+e.message); }
+  busy=false; if(pend){ const w=pend; pend=null; runJob(w); }
+}
+async function computeNow(){ while(busy) await new Promise(r=>setTimeout(r,25)); busy=true; let ok=true;
+  try{ await compute(); }catch(e){ ok=false; if(ENGINE==="gpu"){ await gpuFailed(e); try{ await compute(); ok=true; }catch(e2){ console.error(e2); } } else { console.error(e); setStatus("bad","Error: "+e.message); } }
+  busy=false; return ok; }
+function schedule(what="all"){clearTimeout(timer); job++; $("prog").hidden=true; $("runIt").disabled=false; setStatus("warn","computing…");
+  timer=setTimeout(()=>runJob(what),90);}
+// logarithmic sliders (0…1000 → min…max)
+const LOGS={dp:[0.2,1000],z1:[0.1,299.8],P:[0.001,100],texp:[0.0001,5000]};
+const toLog=(id,v)=>{const [a,b]=LOGS[id]; return a*Math.pow(b/a,v/1000);}, fromLog=(id,x)=>{const [a,b]=LOGS[id]; return Math.round(1000*Math.log(x/a)/Math.log(b/a));};
+function clampZ1(){ if(S.z1>S.L-0.2){S.z1=Math.max(0.1,S.L-0.2); $("z1").value=fromLog("z1",S.z1);} }
+for(const id of ["dp","z1","P","texp"]) $(id).addEventListener("input",e=>{S[id]=toLog(id,+e.target.value); clampZ1(); updateOutputs(); schedule();});
+for(const id of ["L","px","noise","NA","Db","sl","dirt","QE","FW","rn","mfd"]) $(id).addEventListener("input",e=>{S[id]=+e.target.value; clampZ1(); updateOutputs(); schedule();});
+$("fl").addEventListener("input",e=>{const keep=Math.abs(S.sl-S.fl)<1e-9; S.fl=+e.target.value; if(keep){S.sl=S.fl; $("sl").value=S.sl;} updateOutputs(); schedule();});
+$("sEqF").addEventListener("click",()=>{S.sl=S.fl; $("sl").value=S.sl; updateOutputs(); schedule();});
+document.querySelectorAll("button[data-ds]").forEach(b=>b.addEventListener("click",()=>{S.sl=Math.max(0.5,Math.min(60,+(S.sl+(+b.dataset.ds)).toFixed(4))); $("sl").value=S.sl; updateOutputs(); schedule();}));
+function srcUI(){ const f=S.src==="fiber"; $("fiberOpts").hidden=!f; $("laserOpts").hidden=f; }
+$("src").addEventListener("change",e=>{S.src=e.target.value; srcUI(); schedule();});
+$("zoom").addEventListener("change",e=>{S.zoom=+e.target.value; if(last) drawAll();});
+$("psr").addEventListener("change",e=>{S.psr=e.target.checked; $("psrRows").hidden=!S.psr; schedule();});
+$("K").addEventListener("change",e=>{S.K=+e.target.value; schedule();});
+$("psrMode").addEventListener("change",e=>{S.psrMode=e.target.value; schedule();});
+$("pin").addEventListener("change",e=>{S.pin=e.target.checked; $("dp").disabled=!S.pin; $("dp-o").disabled=!S.pin; schedule();});
+$("phot").addEventListener("change",e=>{S.phot=e.target.checked; $("photRows").hidden=!S.phot; $("noiseRow").hidden=S.phot; schedule();});
+$("bits").addEventListener("change",e=>{S.bits=+e.target.value; schedule();});
+$("autoExp").addEventListener("click",async()=>{ clearTimeout(timer); if(!started) return; await computeNow(); if(!last||!last.phot){ return; } const P=last.phot, need=0.8*S.FW/Math.max(P.peakRel*P.ePerMs,1e-30);
+  S.texp=Math.max(LOGS.texp[0],Math.min(LOGS.texp[1],need)); $("texp").value=fromLog("texp",S.texp); updateOutputs(); schedule();});
+$("lens").addEventListener("change",e=>{S.lens=e.target.checked; $("naRow").hidden=!S.lens; schedule();});
+$("lam").addEventListener("change",e=>{S.lam=+e.target.value; const col={0.405:"#9b6bff",0.532:"#3ddc6b",0.6328:"#ff3b2f"}[S.lam]; document.documentElement.style.setProperty("--beam",col); schedule();});
+$("N").addEventListener("change",e=>{S.N=+e.target.value; schedule();});
+$("bgdiv").addEventListener("change",e=>{S.bgdiv=e.target.checked; schedule();});
+$("stype").addEventListener("change",e=>{S.stype=e.target.value; buildSampleUI(); schedule();});
+$("dz").addEventListener("input",e=>{S.dz=+e.target.value; updateOutputs(); schedule("rec");});
+$("cons").addEventListener("change",e=>{S.cons=e.target.value;});
+$("iters").addEventListener("input",e=>{S.iters=+e.target.value; updateOutputs();});
+$("row").addEventListener("input",e=>{S.row=+e.target.value; updateOutputs(); if(last){const {N,rec}=last; const A=new Float64Array(N*N),P=new Float64Array(N*N); for(let q=0;q<N*N;q++){A[q]=Math.hypot(rec.re[q],rec.im[q]);P[q]=Math.atan2(rec.im[q],rec.re[q]);} drawProfile(A,P);}});
+// typed values: set the slider (log-aware) and fire its input handler
+for(const k in DEC){const o=$(k+"-o"); if(!o) continue;
+  const typed=()=>{let v=+o.value; if(!isFinite(v)) return; const sl=$(k);
+    if(LOGS[k]){v=Math.max(LOGS[k][0],Math.min(LOGS[k][1],v)); sl.value=fromLog(k,v); sl.dispatchEvent(new Event("input")); S[k]=v;}
+    else if(k==="row"){const f=last?v/(last.N*last.dx):0; sl.value=Math.max(-0.5,Math.min(0.5,f)); sl.dispatchEvent(new Event("input"));}
+    else {v=Math.max(+sl.min,Math.min(+sl.max,v)); sl.value=v; sl.dispatchEvent(new Event("input")); S[k]=v;}
+    o.blur(); updateOutputs(); if(LOGS[k]) schedule();};
+  o.addEventListener("change",typed); o.addEventListener("keydown",e=>{if(e.key==="Enter")typed();});}
+$("runIt").addEventListener("click",()=>iterate());
+$("resetIt").addEventListener("click",()=>{job++; $("prog").hidden=true; $("runIt").disabled=false; runJob("rec");});
+$("tShow").addEventListener("click",()=>{S.truthAmp=!S.truthAmp; $("tShow").textContent=S.truthAmp?"amplitude":"phase"; $("tShow").setAttribute("aria-pressed",S.truthAmp); drawAll();});
+// colour bar
+{const c=$("cbar").getContext("2d"); for(let i=0;i<160;i++){const v=LUT[Math.round(i/159*255)]; c.fillStyle=`rgb(${v})`; c.fillRect(i,0,1,10);}}
+
+buildSampleUI();
+$("dp").value=fromLog("dp",S.dp); $("z1").value=fromLog("z1",S.z1); $("P").value=fromLog("P",S.P); $("texp").value=fromLog("texp",S.texp); $("noiseRow").hidden=S.phot;
+// ---------------------------------------------------------------- collapsible parameter boxes
+{ const KEY="dihm-collapsed"; let saved={}; try{saved=JSON.parse(localStorage.getItem(KEY)||"{}");}catch(e){}
+  const cards=[...document.querySelectorAll(".side .card")];
+  const save=()=>{try{const o={}; cards.forEach(c=>o[c.dataset.key]=c.classList.contains("collapsed")); localStorage.setItem(KEY,JSON.stringify(o));}catch(e){}};
+  cards.forEach(c=>{const h=c.querySelector(":scope>h2"); c.dataset.key=h.textContent.trim();
+    h.setAttribute("role","button"); h.tabIndex=0;
+    const set=v=>{c.classList.toggle("collapsed",v); h.setAttribute("aria-expanded",!v);};
+    set(!!saved[c.dataset.key]);
+    const tog=()=>{set(!c.classList.contains("collapsed")); save();};
+    h.addEventListener("click",tog); h.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault(); tog();}});
+    c._set=set;});
+  $("collapseAll").addEventListener("click",()=>{cards.forEach(c=>c._set(true)); save();});
+  $("expandAll").addEventListener("click",()=>{cards.forEach(c=>c._set(false)); save();});
+}
+// ---------------------------------------------------------------- presets
+const PRESETS={
+  default:{src:"laser",lam:0.532,N:512,psr:false,lens:true,pin:true,Db:2,fl:4,sl:4,NA:0.5,dp:1,z1:0.5,L:10,px:5.5,stype:"text",sv:{textH:20,texth:0.3,textn:1.52},dz:0,
+    note:"Point-source geometry: 20× magnification, 1.8 µm resolution, 141 µm field."},
+  mysetup:{src:"laser",lam:0.532,N:512,psr:false,lens:false,pin:true,Db:2,dp:500,z1:60,L:70,px:5.5,stype:"text",sv:{textH:100,texth:0.3,textn:1.52},dz:0,
+    note:"Your setup: 532 nm, 500 µm pinhole without lens, pinhole–sample 60 mm, sample–camera 10 mm, 100 µm letters. Assumed: 2 mm beam, 5.5 µm pixels. Expect ~8 µm resolution inside a ~0.5 mm lit spot."},
+  chen:{src:"laser",lam:0.532,N:512,psr:false,lens:false,pin:true,Db:2,P:1.5,dp:40,z1:269,L:270,px:1.34,stype:"rbc",sv:{},dz:0,
+    note:"Chen et al., Electronics 14 (2025) 1697: 532 nm, 40 µm pinhole, no lens, sample within 1 mm of a 1.34 µm-pixel sensor. Pinhole–sensor distance assumed 27 cm. The simulated sensor is 512 px (0.69 mm), much smaller than their 6 mm chip."},
+  chenlam:{zoom:8,src:"fiber",lam:0.405,mfd:3.3,N:1024,psr:true,K:2,psrMode:"psr",lens:false,pin:true,z1:60,L:60.5,px:0.9,stype:"pbars",sv:{pbarsw:0.6,pbarsph:1.0},dz:0,
+    note:"Chen & Lam, Opt. Lett. 50, 1181 (2025): 405 nm fibre-pigtailed diode (Thorlabs LP405C1), sample 0.5 mm from a 0.9 µm-pixel sensor, source on an x–y stage for sub-pixel shifts, phase USAF target. Assumed: source–sample 60 mm (the paper only says ≫ 0.5 mm), MFD 3.3 µm, phase 1 rad. Their 25 randomly placed frames and joint optimisation are replaced here by 2×2 known shifts and shift-and-add. Smallest bars 0.6 µm (below the 0.9 µm pixel): resolved with PSR, blurred from one frame. Switch “Reconstruct from” and press “Remove twin image” to compare."},
+};
+function setSlider(k,v){const sl=$(k); if(!sl) return; sl.value=LOGS[k]?fromLog(k,v):v;}
+function applyPreset(name){
+  const P=PRESETS[name]; if(!P) return;
+  for(const k of ["Db","fl","sl","NA","dp","z1","L","px","dz","P"]) if(P[k]!==undefined){S[k]=P[k]; setSlider(k,P[k]);}
+  S.zoom=P.zoom||1; $("zoom").value=String(S.zoom);
+  S.src=P.src; $("src").value=S.src; if(P.mfd){S.mfd=P.mfd; setSlider("mfd",P.mfd);} srcUI();
+  S.lam=P.lam; $("lam").value=String(P.lam); $("lam").dispatchEvent(new Event("change"));
+  S.N=P.N; $("N").value=String(P.N);
+  S.psr=P.psr; $("psr").checked=S.psr; $("psrRows").hidden=!S.psr; if(P.K){S.K=P.K; $("K").value=String(P.K);} if(P.psrMode){S.psrMode=P.psrMode; $("psrMode").value=P.psrMode;}
+  S.lens=P.lens; $("lens").checked=S.lens; $("naRow").hidden=!S.lens;
+  S.pin=P.pin; $("pin").checked=S.pin; $("dp").disabled=!S.pin; $("dp-o").disabled=!S.pin;
+  S.stype=P.stype; $("stype").value=S.stype; Object.assign(S.sv,P.sv); buildSampleUI();
+  $("presetNote").textContent=P.note; $("preset").value=name;
+  updateOutputs(); clearTimeout(timer); if(started) $("autoExp").click();
+}
+$("loadPreset").addEventListener("click",()=>applyPreset($("preset").value));
+// ---------------------------------------------------------------- GPU gate: nothing is simulated until the check has finished
+const SYM={run:"…",ok:"✓",warn:"!",fail:"✗"};
+function glog(k,st,msg){ const li=document.querySelector(`#gateList li[data-k="${k}"]`); if(!li) return; li.dataset.s=st; li.querySelector(".ic").textContent=SYM[st]||"·"; if(msg!==undefined) li.querySelector(".d").textContent=msg; }
+function startSim(engine,why){
+  setEngine(engine,why); $("gate").hidden=true;
+  const first=!started; started=true;
+  if(first && /^#(mysetup|chen|chenlam|default)$/.test(location.hash)) applyPreset(location.hash.slice(1));
+  else schedule();
+}
+onGpuLost=(i)=>{ setEngine("cpu","GPU device lost"); setStatus("bad","GPU device lost ("+(i&&i.message||"reason unknown")+"): switched to CPU"); if(started) schedule(); };
+async function runGate(){
+  $("gate").hidden=false; $("useCpu").textContent="Use CPU instead"; $("useGpu").hidden=true; $("useCpu").hidden=true; $("verdict").hidden=true;
+  document.querySelectorAll("#gateList li").forEach(li=>{li.dataset.s=""; li.querySelector(".ic").textContent="·"; li.querySelector(".d").textContent="";});
+  job++; while(busy) await new Promise(r=>setTimeout(r,25));
+  if(GPU.dev){ try{ const d=GPU.dev; GPU.dev=null; GPU.ok=false; d.destroy(); }catch(e){} }
+  let res; try{ res=await selfTest(glog); }catch(e){ res={pass:false}; glog("dev","fail",e.message); }
+  const v=$("verdict"); v.hidden=false;
+  if(res.pass){
+    const slow=res.speedup!==null && res.speedup<1.2;
+    v.className="verdict "+(slow||GPU.software?"warn":"ok");
+    v.textContent=slow? `WebGPU works and matches the CPU results, but it is not faster here (${res.speedup.toFixed(1)}×)${GPU.software?" because the adapter is a software emulation":""}. The CPU is recommended.`
+      : `WebGPU works and matches the 64-bit CPU results to single precision. Expected speed-up ≈ ${res.speedup.toFixed(0)}× on large grids. Largest grid that fits this GPU: ${GPU.maxGrid} × ${GPU.maxGrid}.`;
+    $("useGpu").hidden=false; $("useCpu").hidden=false;
+    $("useGpu").className=slow?"":"primary"; $("useCpu").className=slow?"primary":"";
+    (slow?$("useCpu"):$("useGpu")).focus();
+  } else {
+    v.className="verdict bad"; v.textContent="The GPU check failed (see the red line above), so the GPU will not be used. You can still run the simulation on the CPU (same results, slower on large grids).";
+    $("useCpu").hidden=false; $("useCpu").className="primary"; $("useCpu").textContent="Continue on CPU"; $("useCpu").focus();
+    setEngine("cpu","GPU check failed");
+  }
+}
+$("useGpu").addEventListener("click",()=>startSim("gpu"));
+$("useCpu").addEventListener("click",()=>startSim("cpu",GPU.ok?"chosen by user":"GPU check failed"));
+$("retest").addEventListener("click",()=>runGate());
+runGate();
+})();
+</script>
+
+</body>
+</html>

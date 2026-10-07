@@ -1,0 +1,19 @@
+{
+  "name": "holography-bench",
+  "productName": "Holography Bench",
+  "version": "1.1.0",
+  "description": "Desktop app for the Holography Bench simulators (in-line and off-axis DHM)",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "copy-site": "node copy-site.js",
+    "start": "node copy-site.js && electron .",
+    "package:win": "node copy-site.js && electron-packager . \"Holography Bench\" --platform=win32 --arch=x64 --out=dist --overwrite --asar --icon=build/icon.ico --ignore=^/dist --app-copyright=\"Holography Bench authors\" --win32metadata.ProductName=\"Holography Bench\" --win32metadata.FileDescription=\"Holography Bench\"",
+    "package:mac": "node copy-site.js && electron-packager . \"Holography Bench\" --platform=darwin --arch=universal --out=dist --overwrite --asar --ignore=^/dist",
+    "package:linux": "node copy-site.js && electron-packager . \"Holography Bench\" --platform=linux --arch=x64 --out=dist --overwrite --asar --ignore=^/dist"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "electron": "44.5.1"
+  }
+}

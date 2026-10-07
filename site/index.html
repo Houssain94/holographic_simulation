@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#161b21">
+<meta name="description" content="Browser simulators for in-line (lensless) and off-axis digital holographic microscopy">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<title>Holography Bench</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a start screen with two instrument cards (each with its optical layout drawn to the bench's style); choosing one swaps to a full-height view with a slim top bar and the simulator below. Deliberately single dark theme, matching both simulators. */
+:root{
+  --table:#161b21; --panel:#1e252d; --panel2:#252e37; --line:#34404c;
+  --fg:#dbe3ea; --muted:#8b99a7; --green:#3ddc6b; --red:#ff3b2f; --amber:#ffb02e; --accent:#7cc4ff; --sample:#e8a33b;
+  --display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--table);color:var(--fg);font-family:var(--display);font-size:15px;line-height:1.45}
+button{font:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---------- start screen */
+#start{min-height:100%;display:flex;flex-direction:column;gap:28px;padding-inline:16px;padding-block:40px 48px;max-width:1120px;margin:0 auto}
+.eyebrow{font-family:var(--mono);font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0}
+h1{font-size:clamp(1.9rem,4.2vw,2.8rem);line-height:1.1;margin:6px 0 8px;font-weight:700;text-wrap:balance}
+.lead{color:var(--muted);max-width:62ch;margin:0;font-size:1.02rem}
+.choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:20px}
+.choice{text-decoration:none;display:flex;flex-direction:column;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:0;color:inherit;cursor:pointer;overflow:hidden;min-width:0;transition:border-color .15s,transform .15s}
+.choice:hover{border-color:var(--accent)}
+.choice:hover .go{background:var(--accent);color:#0e1a26}
+@media (prefers-reduced-motion:no-preference){.choice:hover{transform:translateY(-2px)}}
+.scheme{background:#11161b;border-bottom:1px solid var(--line);padding:14px 16px;display:block}
+.scheme svg{display:block;width:100%;height:auto}
+.body{display:flex;flex-direction:column;gap:12px;padding:18px 20px 20px;flex:1}
+.kind{font-family:var(--mono);font-size:.74rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.choice .h2{font-weight:700;margin:0;font-size:1.45rem;line-height:1.15;text-wrap:balance}
+.choice p{margin:0;color:var(--muted)}
+.specs{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:2px 0 0;font-size:.9rem}
+.specs dt{font-family:var(--mono);font-size:.78rem;color:var(--muted);padding-top:2px}
+.specs dd{margin:0}
+.go{margin-top:auto;align-self:flex-start;font-family:var(--mono);font-size:.85rem;padding:8px 14px;border-radius:999px;border:1px solid var(--accent);color:var(--accent);transition:background .15s,color .15s}
+.foot{color:var(--muted);font-size:.85rem;margin:0}
+
+/* ---------- simulator view */
+#app{height:100%;display:flex;flex-direction:column}
+#app[hidden],#start[hidden]{display:none}
+.bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+.bar button{background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:6px 12px;cursor:pointer}
+.bar button:hover{border-color:var(--accent)}
+.bar .now{font-weight:600;font-size:1.05rem;margin-right:auto;min-width:0}
+.bar .now small{font-family:var(--mono);font-weight:400;color:var(--muted);font-size:.75rem;margin-left:8px}
+.frames{flex:1;position:relative;min-height:0}
+.frames iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--table)}
+</style>
+<style>body{margin:0}</style>
+</head>
+<body>
+
+
+<section id="start" aria-labelledby="t">
+  <header>
+    <p class="eyebrow">Digital holographic microscopy · simulators</p>
+    <h1 id="t">Holography Bench</h1>
+    <p class="lead">Choose the microscope to simulate. Both run in the browser, show the hologram and its reconstruction live, and let you type exact values for every parameter. You can switch between them at any time from the top bar.</p>
+  </header>
+
+  <div class="choices">
+    <a class="choice" href="#inline" id="pickInline" data-sim="inline" aria-describedby="dInline">
+      <span class="scheme" aria-hidden="true">
+        <svg viewBox="0 0 440 150" role="img">
+          <rect x="0" y="0" width="440" height="150" fill="#11161b"/>
+          <polygon points="128,75 418,22 418,128" fill="#3ddc6b" fill-opacity=".16"/>
+          <rect x="12" y="60" width="52" height="30" rx="3" fill="#252e37" stroke="#34404c"/>
+          <text x="38" y="79" fill="#dbe3ea" font-size="11" text-anchor="middle" font-family="IBM Plex Mono,monospace">laser</text>
+          <rect x="64" y="70" width="28" height="10" fill="#3ddc6b" fill-opacity=".85"/>
+          <ellipse cx="98" cy="75" rx="4" ry="18" fill="#7cc4ff" fill-opacity=".25" stroke="#7cc4ff"/>
+          <polygon points="102,68 128,75 102,82" fill="#3ddc6b" fill-opacity=".6"/>
+          <line x1="128" y1="48" x2="128" y2="72" stroke="#8b99a7" stroke-width="3"/>
+          <line x1="128" y1="78" x2="128" y2="102" stroke="#8b99a7" stroke-width="3"/>
+          <rect x="182" y="50" width="5" height="50" fill="#e8a33b"/>
+          <rect x="418" y="18" width="10" height="114" fill="#4b5866"/>
+          <text x="98" y="112" fill="#8b99a7" font-size="10" text-anchor="middle" font-family="IBM Plex Mono,monospace">lens</text>
+          <text x="128" y="40" fill="#8b99a7" font-size="10" text-anchor="middle" font-family="IBM Plex Mono,monospace">pinhole</text>
+          <text x="184" y="42" fill="#e8a33b" font-size="10" text-anchor="middle" font-family="IBM Plex Mono,monospace">sample</text>
+          <text x="404" y="144" fill="#8b99a7" font-size="10" text-anchor="end" font-family="IBM Plex Mono,monospace">camera</text>
+          <path d="M240 50 q10 25 0 50 M290 42 q14 33 0 66 M340 34 q18 41 0 82" fill="none" stroke="#3ddc6b" stroke-opacity=".5"/>
+        </svg>
+      </span>
+      <span class="body">
+        <span class="kind">In-line · lensless · Gabor</span>
+        <span class="h2">In-line DHM</span>
+        <p id="dInline">A point source made by a lens and a pinhole lights the sample; the camera records the shadow hologram with no lens in between. Magnification comes from the geometry.</p>
+        <dl class="specs">
+          <dt>source</dt><dd>laser + lens + pinhole, or fibre</dd>
+          <dt>grid</dt><dd>256 to 2128 px, GPU check at start</dd>
+          <dt>extras</dt><dd>photon noise, dust filtering, pixel super-resolution, twin-image removal</dd>
+        </dl>
+        <span class="go">Open in-line DHM →</span>
+      </span>
+    </a>
+
+    <a class="choice" href="#offaxis" id="pickOff" data-sim="offaxis" aria-describedby="dOff">
+      <span class="scheme" aria-hidden="true">
+        <svg viewBox="0 0 440 150" role="img">
+          <rect x="0" y="0" width="440" height="150" fill="#11161b"/>
+          <rect x="12" y="105" width="52" height="30" rx="3" fill="#252e37" stroke="#34404c"/>
+          <text x="38" y="124" fill="#dbe3ea" font-size="11" text-anchor="middle" font-family="IBM Plex Mono,monospace">He–Ne</text>
+          <!-- beams -->
+          <line x1="64" y1="120" x2="110" y2="120" stroke="#ff3b2f" stroke-width="3"/>
+          <line x1="110" y1="120" x2="330" y2="120" stroke="#ff3b2f" stroke-width="2.5" stroke-opacity=".85"/>
+          <line x1="110" y1="120" x2="110" y2="30" stroke="#ffb02e" stroke-width="2.5" stroke-opacity=".9"/>
+          <line x1="110" y1="30" x2="330" y2="30" stroke="#ffb02e" stroke-width="2.5" stroke-opacity=".9"/>
+          <line x1="330" y1="120" x2="330" y2="30" stroke="#ff3b2f" stroke-width="2.5" stroke-opacity=".85"/>
+          <line x1="330" y1="30" x2="410" y2="30" stroke="#ff3b2f" stroke-width="2.5"/>
+          <line x1="330" y1="30" x2="410" y2="22" stroke="#ffb02e" stroke-width="2" stroke-dasharray="5 3"/>
+          <!-- optics -->
+          <rect x="102" y="112" width="16" height="16" fill="#7cc4ff" fill-opacity=".2" stroke="#7cc4ff" transform="rotate(45 110 120)"/>
+          <rect x="322" y="22" width="16" height="16" fill="#7cc4ff" fill-opacity=".2" stroke="#7cc4ff" transform="rotate(45 330 30)"/>
+          <line x1="100" y1="20" x2="120" y2="40" stroke="#dbe3ea" stroke-width="3"/>
+          <line x1="320" y1="110" x2="340" y2="130" stroke="#dbe3ea" stroke-width="3"/>
+          <rect x="190" y="108" width="5" height="24" fill="#e8a33b"/>
+          <ellipse cx="226" cy="120" rx="4" ry="13" fill="#7cc4ff" fill-opacity=".25" stroke="#7cc4ff"/>
+          <ellipse cx="282" cy="120" rx="4" ry="13" fill="#7cc4ff" fill-opacity=".25" stroke="#7cc4ff"/>
+          <rect x="410" y="8" width="10" height="44" fill="#4b5866"/>
+          <text x="110" y="146" fill="#8b99a7" font-size="10" text-anchor="middle" font-family="IBM Plex Mono,monospace">BS1</text>
+          <text x="192" y="100" fill="#e8a33b" font-size="10" text-anchor="middle" font-family="IBM Plex Mono,monospace">sample</text>
+          <text x="254" y="146" fill="#8b99a7" font-size="10" text-anchor="middle" font-family="IBM Plex Mono,monospace">objective · tube lens</text>
+          <text x="220" y="22" fill="#ffb02e" font-size="10" text-anchor="middle" font-family="IBM Plex Mono,monospace">reference arm</text>
+          <text x="318" y="56" fill="#8b99a7" font-size="10" text-anchor="end" font-family="IBM Plex Mono,monospace">BS2 (tilted)</text>
+          <text x="420" y="66" fill="#8b99a7" font-size="10" text-anchor="end" font-family="IBM Plex Mono,monospace">camera</text>
+        </svg>
+      </span>
+      <span class="body">
+        <span class="kind">Off-axis · Mach–Zehnder</span>
+        <span class="h2">Off-axis DHM</span>
+        <p id="dOff">A Mach–Zehnder interferometer with a microscope objective in the object arm. A tilted reference beam puts carrier fringes on the camera, and one Fourier filter recovers amplitude and phase from a single shot.</p>
+        <dl class="specs">
+          <dt>source</dt><dd>He–Ne 632.8 nm</dd>
+          <dt>samples</dt><dd>phase targets, beads, red blood cells</dd>
+          <dt>extras</dt><dd>Fourier plane with +1 order filter, carrier and bandwidth check, blank division</dd>
+        </dl>
+        <span class="go">Open off-axis DHM →</span>
+      </span>
+    </a>
+  </div>
+
+  <p class="foot">Tip: the link ending in <span style="font-family:var(--mono)">#inline</span> or <span style="font-family:var(--mono)">#offaxis</span> opens a simulator directly.</p>
+</section>
+
+<section id="app" hidden aria-label="Simulator">
+  <div class="bar">
+    <button id="back" type="button">← Choose simulator</button>
+    <span class="now" id="now" aria-live="polite"></span>
+    <button id="other" type="button"></button>
+  </div>
+  <div class="frames" id="frames"></div>
+</section>
+
+<script>
+(()=>{
+  const SIMS={
+    inline:{file:"inline.html",name:"In-line DHM",note:"lens + pinhole point source",other:"offaxis"},
+    offaxis:{file:"offaxis.html",name:"Off-axis DHM",note:"Mach–Zehnder, He–Ne",other:"inline"}
+  };
+  const $=id=>document.getElementById(id);
+  const frames={};   // each simulator is loaded once and kept, so switching back keeps its settings
+  function setHash(h){ try{ history.replaceState(null,"",h?"#"+h:location.pathname); }catch(e){} }
+  function open(key){
+    const s=SIMS[key]; if(!s) return;
+    if(!frames[key]){
+      const f=document.createElement("iframe");
+      f.src=s.file; f.title=s.name+" simulator"; f.setAttribute("allow","webgpu; fullscreen");
+      $("frames").appendChild(f); frames[key]=f;
+    }
+    for(const k in frames) frames[k].hidden=(k!==key);
+    $("now").innerHTML=s.name+"<small>"+s.note+"</small>";
+    $("other").textContent="Switch to "+SIMS[s.other].name;
+    $("other").dataset.sim=s.other;
+    $("start").hidden=true; $("app").hidden=false; setHash(key);
+    frames[key].focus();
+  }
+  function home(){ $("app").hidden=true; $("start").hidden=false; setHash(""); $("pickInline").focus(); }
+  document.querySelectorAll(".choice").forEach(b=>b.addEventListener("click",e=>{e.preventDefault(); open(b.dataset.sim);}));
+  $("back").addEventListener("click",home);
+  $("other").addEventListener("click",e=>open(e.currentTarget.dataset.sim));
+  const h=(location.hash||"").slice(1); if(SIMS[h]) open(h);
+})();
+</script>
+
+<script>
+// installable web app: offline cache (only when served over http/https, e.g. GitHub Pages)
+if("serviceWorker" in navigator && /^https?:$/.test(location.protocol)){
+  navigator.serviceWorker.register("sw.js").catch(e=>console.warn("service worker:",e));
+}
+</script>
+</body>
+</html>
